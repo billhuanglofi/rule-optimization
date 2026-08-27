@@ -1,448 +1,389 @@
-# Phase 3B — Optimization Candidate Deep Dive
+# Estate-Wide Rule Discovery
 
-The business model is validated and optimization discovery is complete.
+Pause detailed optimization design for now.
 
-Current state:
+We have validated the framework using MY, IN, and SG pilots, but these markets
+represent only part of the full rule estate.
 
-- 1,451 rules modeled
-- 124 validated business families
-- 0 unresolved SME/business questions
-- known defects are blocked
-- no P1 optimization candidate was identified
-- current candidates are P2 discovery targets
+The next objective is to inspect ALL rules in the target database and determine
+what additional rule populations, schemas, semantics, and business families
+exist.
 
-Do NOT modify production rules.
-Do NOT generate implementation SQL.
-Do NOT merge or delete rules.
+This is discovery only.
 
-The objective is to understand WHY the largest P2 families contain so many
-rule variants and determine whether the variation is:
+Do NOT:
+- modify production rules
+- generate migration SQL
+- merge/delete rules
+- assume MY/IN/SG market mappings apply globally
+- perform deep LLM review rule-by-rule
 
-1. business-required;
-2. configuration-required;
-3. implementation duplication;
-4. parameterizable;
-5. potentially obsolete/unreachable.
-
-Start with BF001 and then the next 2-4 highest-impact P2 families.
+Use the high-throughput bulk/local-cache architecture.
 
 ---
 
-## 1. Deep-dive BF001
+## 1. Preserve current validated baselines
 
-Current known shape:
+Do not modify the frozen MY, IN, or SG results.
 
-- approximately 251 rules
-- approximately 244 condition patterns
-- approximately 250 exact implementations
-- 1 normalized business flow
-- 2 error/retry patterns
+Verify their baseline/checksum markers before and after this scan.
 
-Do not conclude that BF001 should be merged.
+The current MY/IN/SG knowledge becomes reference knowledge only.
 
-Instead determine what dimensions create the 244 condition patterns.
+---
 
-Build a normalized variation matrix.
+## 2. Inventory the complete database rule estate
 
-Possible dimensions include:
+Bulk-read all relevant RULES_V2 / RULES_NODES records.
 
-- market
-- direction
-- channel/source
-- message family/type
-- sender country
-- receiver country
-- sender address
-- receiver address
+Target:
+- zero per-rule Oracle queries
+- zero per-node Oracle queries
+
+Capture at minimum:
+
+- RULE_ID
+- DESCRIPTION
+- ENVIRONMENT
+- NODE_ID
+- RANK
+- VERB
+- OPERATOR
+- canonical NODES metadata
+
+Persist an estate-wide local snapshot.
+
+Do not send the entire raw dataset through LLM reasoning.
+
+---
+
+## 3. Discover rule-ID populations
+
+Analyze rule IDs as metadata only.
+
+Group naming patterns such as:
+
+CBPR_MY_*
+CBPR_IN_*
+CBPR_SG_*
+CBPR_HK_*
+...
+
+but also discover patterns we have never seen before.
+
+Create normalized rule-ID population patterns.
+
+Example output:
+
+| Population pattern | Rules | Example IDs |
+|---|---:|---|
+| CBPR_MY_* | ... | ... |
+| CBPR_IN_* | ... | ... |
+| NEW_PATTERN_A | ... | ... |
+
+IMPORTANT:
+
+Rule-ID pattern may be used to discover populations.
+
+It must NOT be used as business market evidence.
+
+---
+
+## 4. Compare the full estate against known semantics
+
+Build the union of already known node IDs from MY + IN + SG.
+
+For the full estate report:
+
+- total unique NODE_IDs
+- already-known NODE_IDs
+- new NODE_IDs
+- frequency of each new NODE_ID
+- example rules containing each new node
+
+Classify new nodes initially as:
+
+KNOWN_GENERIC
+LIKELY_GENERIC
+MARKET_OR_BRT_SPECIFIC
+UNKNOWN
+
+Do not guess detailed semantics for UNKNOWN nodes.
+
+---
+
+## 5. Discover new condition dimensions
+
+Identify every unique condition-node family across the estate.
+
+Compare against known conditions such as:
+
+- country
+- sendercountry
+- receivercountry
+- senderaddress
+- receiveraddress
+- message type
 - currency
-- participant/institution
+- account
+- routing
+- participant
 - product/service
-- routing condition
-- downstream processor
-- transaction-state variation
-- payload flags
-- endpoint/global variable
-- error/retry behavior
+
+Report new condition dimensions not present in MY/IN/SG.
+
+For every new condition dimension include:
+
+- node ID
+- occurrence count
+- number of rules
+- representative verb values
+- representative rule populations
+
+Do not classify business meaning solely from the node name.
+
+---
+
+## 6. Discover new message families
+
+Using explicit conditions only, identify message families/types such as:
+
+- MX / pacs.*
+- MX / camt.*
+- MT
+- custom/internal
+- MESSAGE_AGNOSTIC
+- UNKNOWN
+
+Report any new message-type patterns not seen in the pilot markets.
+
+Do not force unknown message patterns into existing categories.
+
+---
+
+## 7. Run the generic structural parser estate-wide
+
+Use already validated GENERIC semantics for:
+
+- ordered rank reconstruction
+- condition/action separation
+- error/retry block detection
+- transaction states
+- payload dependencies
 - terminal behavior
+- GLOBAL destination-vs-market rule
+- GLOBAL prs-* channel-ingress semantics
 
-For every differing dimension report:
+Do not apply MY-, IN-, or SG-specific BRT mappings outside their scopes.
 
-Dimension:
-Unique values/patterns:
-Rules affected:
-Business-required? YES / NO / UNKNOWN
-Evidence:
-Potentially parameterizable? YES / NO / UNKNOWN
+Record structural anomalies separately.
 
 ---
 
-## 2. Separate condition structure from condition values
+## 8. Detect structural novelty
 
-This is important.
-
-Two rules may contain different values but the same logical condition structure.
-
-Example:
-
-Rule A:
-country = SG
-currency = SGD
-receiver = BANK_A
-
-Rule B:
-country = SG
-currency = USD
-receiver = BANK_B
-
-These have different exact conditions but may share the same condition schema:
-
-country
-+ currency
-+ receiver
-
-Create:
-
-condition_schema_signature
-
-This signature should describe WHICH condition dimensions exist, not their
-specific values.
-
-Then report for BF001:
-
-Rules:
-Unique exact condition patterns:
-Unique condition-schema signatures:
-
-Top condition schemas:
-- schema
-- rule count
-- varying values
-- representative rules
-
-This will tell us whether 244 condition patterns are actually only a small
-number of reusable business templates.
-
----
-
-## 3. Separate flow structure from configuration
-
-Since BF001 has one normalized business flow, determine whether its exact
-implementation differences come mainly from configuration.
-
-For the common flow identify:
-
-Common ordered business stages:
-Common actions:
-Common terminal behavior:
-
-Then identify varying implementation parameters:
-
-- routing destination
-- global variable
-- endpoint
-- transaction state
-- payload field
-- formatter configuration
-- channel configuration
-- callback configuration
-- other verb values
-
-Report:
-
-structural differences
-versus
-configuration-value differences
-
-Do not treat configuration differences as separate business flows.
-
----
-
-## 4. Look for parameterization opportunities
-
-Identify patterns where many rules have:
-
-same business purpose
-+ same condition schema
-+ same flow
-+ different values
-
-These may be candidates for a data-driven/template-driven rule model.
-
-Classify potential opportunities as:
-
-VALUE_PARAMETERIZATION
-
-CONDITION_TABLE
-
-ROUTING_CONFIGURATION
-
-COMMON_FLOW_TEMPLATE
-
-COMMON_ERROR_TEMPLATE
-
-COMMON_COMPLETION_TEMPLATE
-
-Do not propose implementation yet.
-
-For each opportunity show:
-
-Affected rules:
-Business family:
-Common structure:
-Values that vary:
-Current number of rules:
-Potential conceptual representation:
-Business risks:
-Confidence:
-
-Example conceptual result:
-
-Current:
-
-40 rules
-
-same:
-country + currency + receiver conditions
-same processing flow
-
-different:
-currency
-receiver
-destination
-
-Potential model:
-
-1 rule/template
-+ 40 configuration rows
-
-This is only a conceptual opportunity, not a proposed production change.
-
----
-
-## 5. Find meaningful subfamilies inside BF001
-
-Do not use exact rule signature.
-
-Cluster BF001 using:
-
-condition_schema_signature
-+ normalized business flow
-+ error_signature
-+ terminal behavior
-
-Then report:
-
-BF001 total rules:
-Business subfamilies:
-Largest subfamily:
-Smallest subfamily:
-
-For each subfamily:
-
-Subfamily ID:
-Rule count:
-Condition schema:
-Common flow:
-Error pattern:
-Values that vary:
-Representative rules:
-Business interpretation:
-
-The goal is to reduce:
-
-251 individual rules
-
-into a much smaller number of understandable implementation patterns.
-
----
-
-## 6. Identify outliers
-
-Within each large family identify rules that are unusual compared with peers.
+Report new control-flow structures that were not observed in MY/IN/SG.
 
 Examples:
 
-- unique condition schema
-- unique action
-- unique transaction state
-- unique routing path
-- extra retry/error behavior
-- hardcoded value
-- unique downstream system
-- unusually high/low node count
+- new block markers
+- new nesting structures
+- new retry structures
+- unusual terminal behavior
+- new producer/consumer dependencies
 
 Classify:
 
-EXPECTED_BUSINESS_VARIANT
-POSSIBLE_LEGACY_VARIANT
-POSSIBLE_DEFECT
-NEEDS_REVIEW
+KNOWN_STRUCTURE
+NEW_VALID_PATTERN_CANDIDATE
+SOURCE_DEFECT_CANDIDATE
+UNKNOWN_STRUCTURE
 
-Do not call something obsolete without evidence.
-
----
-
-## 7. Analyze repeated tails and blocks
-
-Find identical or near-identical ordered subsequences such as:
-
-validation -> reporting -> completion
-
-or
-
-block-on-error
--> replay/wiretap
--> payment-message-complete
--> block-on-error-end
-
-Report repeated sequences with:
-
-Sequence ID:
-Normalized nodes/actions:
-Occurrences:
-Business families:
-Markets:
-Configuration differences:
-
-This can reveal reusable common components even when whole rules cannot be
-consolidated.
+Do not change the parser merely to accept new structures.
 
 ---
 
-## 8. Rank optimization forms separately
+## 9. Generate estate-wide hierarchical signatures
 
-Do not use one generic optimization score.
+For every rule generate:
 
-For each family score:
+- condition_signature
+- flow_signature
+- error_signature
+- exact_signature
 
-### Rule-count reduction potential
+Then report:
 
-Could many rules become fewer rule definitions plus configuration?
+Total rules:
+Unique condition signatures:
+Unique flow signatures:
+Unique error signatures:
+Unique exact signatures:
 
-### Maintenance reduction potential
-
-Would one shared template reduce repeated changes?
-
-### Runtime simplification potential
-
-Would the execution path become simpler?
-
-### Risk
-
-Could consolidation accidentally change business behavior?
-
-### Evidence confidence
-
-How strongly does current rule evidence support the opportunity?
-
-Use:
-
-HIGH
-MEDIUM
-LOW
-
----
-
-## 9. Produce a candidate review sheet
-
-For the top 10 deep-dive opportunities create:
-
-Candidate ID:
-Business family:
-Opportunity type:
-Current rule count:
-Condition schemas:
-Normalized flows:
-Exact implementations:
-Main varying dimensions:
-Potential target model:
-Estimated conceptual reduction:
-Business behavior preserved:
-Known exceptions:
-Risks:
-Confidence:
-Required human validation:
-
-Do not calculate fake precision.
-
-Example:
-
-Current rules: 60
-Potential template families: 3-5
-
-is better than claiming:
-
-Reduction = 93.7%
-
-without an implementation design.
-
----
-
-## 10. Keep known defects excluded
-
-The existing known defects remain BLOCKED.
-
-Do not use malformed or conflicting rules as consolidation examples.
-
-If a newly discovered outlier appears defective, add it to the defect report
-instead of forcing it into an optimization family.
-
----
-
-## 11. Required outputs
-
-Create:
-
-analysis/optimization-deep-dive.md
-analysis/optimization-subfamilies.md
-analysis/condition-schema-analysis.md
-analysis/parameterization-opportunities.md
-analysis/repeated-flow-blocks.md
-analysis/optimization-review-sheet.md
-
-Also update machine-readable candidate data where useful.
-
----
-
-## 12. Final report
+Compare them with the MY/IN/SG signatures.
 
 Report:
 
-Families deep-reviewed:
-Rules covered:
+- already-known families
+- variants of known families
+- completely new families
 
-Unique exact condition patterns:
-Unique condition schemas:
-Unique normalized flows:
-Unique error patterns:
+---
 
-Parameterization opportunities:
-Common-flow-template opportunities:
-Common-error-template opportunities:
-Common-completion-template opportunities:
+## 10. Discover business populations, but do not over-classify market
 
-Outliers:
-Possible new defects:
+Where approved condition evidence clearly identifies a market, classify it.
 
-Top 10 opportunities:
+Otherwise leave market as UNKNOWN/PARTIAL.
 
-For BF001 specifically report:
+The current generic market evidence strategy may use approved condition evidence
+such as:
 
-Rules:
-Exact condition patterns:
-Condition schemas:
-Exact implementations:
-Normalized flows:
-Error patterns:
-Largest implementation subfamily:
-Main dimensions causing fragmentation:
+- cond-country
+- sendercountry
+- receivercountry
+- approved structured BIC/address country
+- applicable message-family-specific precedence
+
+But do not automatically generalize a market-specific BRT fallback.
+
+For example:
+
+MY sendercountry mapping remains MY-specific.
+IN outbound mapping remains IN-specific.
+SG-specific mappings remain SG-specific.
+
+New markets should produce clustered SME/BRT questions.
+
+---
+
+## 11. Build novelty scores for rule populations
+
+For each discovered rule population calculate a novelty profile using:
+
+- new node IDs
+- new condition dimensions
+- new message families
+- new flow signatures
+- new error signatures
+- unknown market mappings
+- structural anomalies
+
+Classify populations:
+
+LOW_NOVELTY
+MEDIUM_NOVELTY
+HIGH_NOVELTY
+
+This should help decide which population to validate next.
+
+---
+
+## 12. Find potential business families estate-wide
+
+Use the existing business-family model, but treat it as provisional outside
+validated MY/IN/SG scope.
+
+Cluster using:
+
+market/market evidence
+message family
+channel/source
+condition schema
+normalized business flow
+error family
+terminal outcome
+
+Do not optimize yet.
+
+Report whether the existing 124-family model expands significantly.
+
+---
+
+## 13. Specifically compare against current optimization findings
+
+Determine whether BF001-BF005 patterns are:
+
+- local to MY/IN/SG
+- common across the estate
+- instances of a much larger generic pattern
+
+For example, search for other populations that have:
+
+many exact rules
++ few condition schemas
++ one/few normalized flows
+
+These may be stronger optimization opportunities than BF001.
+
+Do not rank them for implementation yet.
+
+---
+
+## 14. Do not generate thousands of Markdown files
+
+Primary output should remain machine-readable.
+
+Create:
+
+analysis/estate/
+  estate-summary.md
+  rule-populations.md
+  node-novelty.md
+  condition-novelty.md
+  message-family-novelty.md
+  flow-novelty.md
+  structural-anomalies.md
+  population-novelty-ranking.md
+  business-family-expansion.md
+  estate-rules.jsonl
+
+Do not generate one Markdown card per rule.
+
+---
+
+## 15. Final report
+
+Report:
+
+Total estate rules:
+Total rule-node rows:
+
+Rule-ID population patterns:
+Previously known populations:
+New population patterns:
+
+Unique node IDs:
+Known node IDs:
+New node IDs:
+
+Known condition dimensions:
+New condition dimensions:
+
+Known flow signatures:
+New flow signatures:
+
+Known error signatures:
+New error signatures:
+
+Structural anomalies:
+
+Rules with clear market evidence:
+Rules requiring new BRT/SME market mappings:
+
+Existing business families reused:
+New provisional business families:
+
+Top 10 LOW_NOVELTY populations:
+Top 10 HIGH_NOVELTY populations:
+
+BF001-like high-fragmentation families discovered:
 
 Then recommend:
 
-READY_FOR_OPTIMIZATION_DESIGN
+READY_FOR_TARGETED_ESTATE_VALIDATION
+PARSER_EXTENSION_REQUIRED
+DOMAIN_MAPPING_REQUIRED
 
-or
-
-MORE_CANDIDATE_ANALYSIS_REQUIRED
-
-Do NOT implement any changes.
+Do not start optimization implementation.
+Do not automatically deep-review every new population.
