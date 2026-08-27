@@ -1,38 +1,124 @@
-# Phase 2.0 — CBPR_SG Cross-Market Pilot
+Update the Phase 1 market-classification strategy.
 
-Proceed with `CBPR_SG%` as the next Phase 1 cross-market pilot.
+From now on, focus primarily on CONDITION evidence when determining market.
 
-Do NOT start rule optimization.
+The key principle is:
 
-The objectives are:
+Conditions determine where/who the rule applies to.
+Routing/actions determine what happens to the instruction.
 
-1. validate that the generic parser works with significantly more new node semantics;
-2. discover the SG BRT-specific market evidence rules;
-3. preserve the validated MY and IN baselines;
-4. identify shared vs SG-specific flow families.
+Add a reusable condition-driven market classifier.
 
-## 1. Frozen baselines
+For any normalized country code XXX:
 
-Do not modify:
+1. If an explicit condition contains:
 
-- CBPR_MY validated baseline
-- CBPR_IN validated baseline
-- MY business mappings
-- IN business mappings
-- known IN source-defect classification
+   cond-country = XXX
 
-Verify their freeze-marker checksums before and after the SG run.
+   classify:
+   market_group = XXX
+   confidence = HIGH
+   source = explicit_country
 
-Any checksum drift is a failure.
+2. If:
 
-## 2. SG-specific snapshot
+   cond-sendercountry = XXX
 
-Scope:
+   classify:
+   market_group = XXX
+   confidence = HIGH
+   source = sender_country
 
-`CBPR_SG%`
+3. If:
 
-Create isolated outputs:
+   cond-receivercountry = XXX
 
-```text
-analysis/cache/SG/
-analysis/markets/SG/
+   classify:
+   market_group = XXX
+   confidence = HIGH
+   source = receiver_country
+
+4. If an approved sender-address/BIC condition contains a country code
+   in the defined country-code position, for example:
+
+   ABCDXX...
+
+   where XX is a recognized market/country code,
+
+   classify:
+   market_group = XX
+   confidence = HIGH
+   source = sender_address_country
+
+   Preserve:
+   - original condition
+   - original address/BIC
+   - extracted country code
+   - node ID
+   - rank
+
+Do not use arbitrary substring matching for addresses.
+Parse the country code only from the approved structured position/format.
+
+Market evidence precedence:
+
+1. explicit country
+2. sender country
+3. receiver country
+4. approved address/BIC-derived country
+5. other BRT-approved condition mapping
+
+If multiple condition sources agree, increase evidence strength but keep
+the same market.
+
+Example:
+
+cond-sendercountry = SG
+cond-receivercountry = SG
+
+=> market_group = SG
+=> confidence = HIGH
+=> evidence_sources = [sender_country, receiver_country]
+
+If approved condition sources conflict, do NOT choose one silently.
+
+Example:
+
+cond-sendercountry = IN
+cond-receivercountry = SG
+
+=> market_conflict = true
+=> status = NEEDS_REVIEW
+
+unless the BRT explicitly defines how direction determines which condition
+owns the market classification.
+
+The following are NOT market evidence by themselves:
+
+- destination
+- routing_hub
+- prs-* routing conditions
+- processor
+- endpoint
+- deployment environment
+- rule ID
+- extraction scope
+
+`prs-*` remains GLOBAL channel/source-flow information only.
+
+Re-run the SG classification from the existing local snapshot only.
+
+First report the market evidence distribution:
+
+explicit_country:
+sender_country:
+receiver_country:
+sender_address_country:
+multiple_agreeing_conditions:
+conflicting_conditions:
+no_condition_market_evidence:
+
+Then regenerate SG gaps based on the remaining rules only.
+
+Do not query Oracle.
+Do not automatically start SG validation.
