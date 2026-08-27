@@ -1,53 +1,38 @@
-# Phase 1.9 — Validate and Freeze CBPR_IN
+# Phase 2.0 — CBPR_SG Cross-Market Pilot
 
-The IN SME gaps have been resolved.
+Proceed with `CBPR_SG%` as the next Phase 1 cross-market pilot.
 
-Current expected state:
+Do NOT start rule optimization.
 
-- 235 rules
-- 195 market classifications from explicit country evidence
-- 40 market classifications from approved IN outbound BRT evidence
-- 1 known source defect: CBPR_IN_OB_209023
+The objectives are:
 
-Do not query Oracle.
-Use the existing IN snapshot only.
+1. validate that the generic parser works with significantly more new node semantics;
+2. discover the SG BRT-specific market evidence rules;
+3. preserve the validated MY and IN baselines;
+4. identify shared vs SG-specific flow families.
 
-## 1. Validate market evidence for all 235 rules
+## 1. Frozen baselines
 
-Every `market_group = IN` classification must have an approved evidence path.
+Do not modify:
 
-Approved sources:
+- CBPR_MY validated baseline
+- CBPR_IN validated baseline
+- MY business mappings
+- IN business mappings
+- known IN source-defect classification
 
-### explicit_country
+Verify their freeze-marker checksums before and after the SG run.
 
-Example:
+Any checksum drift is a failure.
 
-`cond-country = IN`
+## 2. SG-specific snapshot
 
-### outbound BRT fallback
+Scope:
 
-For OUTBOUND rules only:
+`CBPR_SG%`
 
-- `cond-sendercountry = IN`
-- approved sender institution condition = HSBC
-- approved sender institution condition = HASE
+Create isolated outputs:
 
-The exact normalized matched condition must be recorded.
-
-Not allowed as market evidence:
-
-- rule ID containing IN
-- extraction scope
-- destination
-- routing_hub
-- processor
-- endpoint
-- environment
-
-For each rule ensure:
-
-```json
-"market_classification_source": {
-  "type": "...",
-  "evidence": ["..."]
-}
+```text
+analysis/cache/SG/
+analysis/markets/SG/
