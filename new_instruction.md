@@ -1,120 +1,192 @@
-# Phase 1.6 — Semantic Flow Validation
+# Phase 1.7 — Hierarchical Signatures and Scale Readiness
 
-The market-classification validation has passed.
+The CBPR_MY Phase 1 pilot is now validated.
 
-Do not query Oracle again. Use the existing local snapshot.
+Do not start optimization.
 
-The purpose of this step is to validate that the deterministic parser
-correctly understands rule flow semantics, not only market classification.
+Do not modify the validated interpretation rules unless a new business
+conflict is discovered.
 
-## 1. Select a representative sample
+## 1. Freeze the validated pilot
 
-Select approximately 25 rules from the existing 507-rule pilot.
+Record the current baseline as:
+
+PHASE_1_CBPR_MY_VALIDATED
+
+Preserve:
+
+- current rules.jsonl
+- Phase 1 gaps/resolutions
+- Phase 1.5 market validation
+- Phase 1.6 flow validation
+- business-rules.md
+- node catalog
+- parser/generator version
+
+Create a snapshot/version marker so later changes can be compared against it.
+
+## 2. Add hierarchical rule signatures
+
+The existing exact signature is too specific for family-level analysis.
+
+For every rule generate these independent signatures:
+
+### condition_signature
+
+Include normalized business entry conditions such as:
+
+- market_group
+- country/sendercountry
+- currency
+- message type
+- product/service
+- important BRT condition dimensions
+
+Exclude:
+
+- rule ID
+- environment
+- destination unless destination is itself an explicit condition
+
+### flow_signature
+
+Represent major business actions in execution order.
+
+Example:
+
+VALIDATION
+> DUPLICATE_CHECK
+> SANCTIONS
+> ROUTING
+> PDP_REPORTING
+> PAYMENT_COMPLETION
+
+Normalize equivalent node IDs into common semantic categories.
+
+Do not include implementation-only values that prevent useful clustering.
+
+### error_signature
+
+Represent error/retry structure independently.
 
 Include:
 
-- 5 simple rules
-- 5 rules using the sendercountry fallback
-- 5 rules with the largest node counts
-- 4 rules containing retry/error branches
-- 3 rules with unusual transaction-state sequences
-- 3 rules from the largest shared/similar signature groups
+- error block presence
+- retry block presence
+- replay/wiretap behavior
+- error terminal action
+- important error transaction states
 
-A rule may satisfy more than one category.
+### exact_signature
 
-## 2. Produce compact semantic reviews
+Retain the current detailed structural signature for exact comparison.
 
-For each sampled rule show:
-
-### Rule ID
-
-Market:
-- value
-- classification source
-
-Entry conditions:
-- ordered condition nodes
-- normalized meaning
-
-Main flow:
-- ordered major actions
-
-Error flow:
-- start/end ranks
-- major actions
-- terminal action
-
-Retry flow:
-- start/end ranks
-- major actions
-- terminal action
-
-Transaction states:
-- ordered values and ranks
-
-External dependencies:
-- routing hub
-- processor/service
-- global variables
-
-Terminal behavior:
-- final meaningful main-path node
-
-Parser assessment:
-- PASS
-- QUESTION
-- FAIL
-
-Do not create verbose prose.
-
-## 3. Validate structural correctness
-
-Check that:
-
-- nodes are interpreted in rank order;
-- error/retry blocks are correctly separated from the main path;
-- block start/end markers are correctly paired;
-- transaction states are attached to the correct branch;
-- payment completion is correctly identified where applicable;
-- destination/routing hub remains technical information;
-- conditions are not accidentally interpreted as actions;
-- actions are not accidentally interpreted as conditions.
-
-## 4. Create a validation report
+## 3. Produce clustering statistics
 
 Create:
 
-analysis/phase-1.6-flow-validation.md
+analysis/signature-analysis.md
 
-Summary:
+Report:
 
-Sample size:
-PASS:
-QUESTION:
-FAIL:
+Rules:
+Unique condition signatures:
+Unique flow signatures:
+Unique error signatures:
+Unique exact signatures:
 
-Branch parsing errors:
-Condition parsing errors:
-Transaction-state errors:
-Terminal-action errors:
-Unknown node semantics:
+Top 20 condition clusters:
+Top 20 flow clusters:
+Top 20 error clusters:
 
-List every QUESTION/FAIL explicitly.
+For each cluster include:
 
-## 5. Decision gate
+- number of rules
+- representative rule IDs
+- important common characteristics
 
-If there are zero material FAIL results and any QUESTION items are
-understood/shared semantic issues rather than parser defects:
+Do not label anything as redundant yet.
 
-mark:
+## 4. Detect differences inside families
 
-PHASE_1_PILOT_VALIDATED
+For rules sharing the same flow_signature but different exact_signature,
+summarize the dimensions causing the differences.
 
-Otherwise:
+Examples:
 
-- identify the shared cause;
-- fix the parser or business mapping;
-- regenerate from local cache;
-- repeat this validation.
+same flow, different:
+- currency
+- market condition
+- destination
+- transaction state
+- callback configuration
+- error behavior
+- payload flag
+- implementation node
 
-Do not start Phase 2 automatically.
+Create:
+
+analysis/signature-differences.md
+
+The purpose is understanding, not optimization.
+
+## 5. Prepare cross-market validation
+
+Do not run the entire estate immediately.
+
+Identify 2–3 additional rule populations that are structurally or
+business-wise different from CBPR_MY.
+
+Prefer populations that exercise different:
+
+- market/BRT mappings
+- currencies
+- destinations/processors
+- message types
+- flow families
+
+For each candidate report:
+
+- estimated rule count
+- node count
+- unique node IDs
+- new node IDs not seen in CBPR_MY
+- expected business-rule gaps
+
+Do not classify a new market using MY-specific fallback rules unless
+the BRT explicitly says they are reusable.
+
+## 6. Business-rule scoping
+
+Review all permanent business rules.
+
+Classify each as:
+
+GLOBAL
+MARKET_SPECIFIC
+BRT_SPECIFIC
+PILOT_ONLY
+
+For example:
+
+Destination/routing_hub is not market evidence
+→ likely GLOBAL
+
+cond-sendercountry = MY -> market_group = MY
+→ MY/BRT-specific
+
+Do not apply market-specific mappings globally.
+
+Create:
+
+docs/business-rule-scope.md
+
+## 7. Decision gate
+
+Recommend one of:
+
+READY_FOR_CROSS_MARKET_PILOT
+NEEDS_TAXONOMY_WORK
+NEEDS_PARSER_WORK
+
+Do not start Phase 2 optimization automatically.
