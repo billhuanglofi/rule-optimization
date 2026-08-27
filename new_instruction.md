@@ -1,248 +1,203 @@
-# Phase 2B — Business Family Review and Naming
+# Phase 2C — Resolve Remaining Business-Model Gaps
 
-The Phase 2A business-model discovery is complete.
+Phase 2B is complete.
 
-Do NOT optimize, merge, delete, or rewrite rules yet.
+Current state:
 
-The goal of this phase is to make the discovered business model understandable
-to engineers and SMEs, and to validate that the 124 business families represent
-real business patterns rather than accidental technical clustering.
+- 124 business families
+- 121 VALIDATED_FAMILY
+- 3 NEEDS_SME_INPUT
+- 16 partial-context rules
+- 2 shared missing-context patterns
+
+Do NOT optimize rules yet.
 
 Use existing local data only.
-Do not query Oracle unless a specific missing fact cannot be resolved locally.
+Do not query Oracle.
 
-## 1. Preserve existing family IDs
+## 1. Investigate the 10 rules with missing message-family context
 
-Keep stable IDs such as:
+Do not ask me a generic question yet.
 
-BF001
-BF002
-BF003
+For each of the 10 rules, inspect the full ordered conditions and actions and
+determine whether message family can be established from existing evidence.
 
-Do not renumber them.
+Look specifically for evidence such as:
 
-Add a human-readable business name and description.
+- cond-originmessagetype
+- explicit message type conditions
+- pacs.*
+- camt.*
+- MT message identifiers
+- ISO 20022-specific conditions
+- formatter/action nodes whose semantics are already validated
+- translation/recombination nodes that are message-family specific
+- input payload fields with explicit message type
+- other BRT condition fields related to message type
 
-Example:
+Do NOT infer message family from rule ID alone.
 
-BF001
-Human name:
-SG MX GPI inbound payment-receipt flow
+Group the 10 rules by shared evidence pattern.
 
-Do not invent names from rule IDs alone.
+For each pattern report:
 
-Use evidence from:
-- market conditions
+Pattern ID:
+Affected rules:
+Conditions shared:
+Actions shared:
+Possible message family:
+Evidence:
+Confidence:
+Why the current classifier could not classify it:
+Exact SME question, if still needed:
+
+If existing explicit business evidence is sufficient, resolve it without
+requiring SME input.
+
+If evidence is implementation-only rather than a business condition, keep the
+message family unresolved and explain why.
+
+## 2. Keep message family and exact message type separate
+
+Model:
+
+message_family:
+- MX
+- MT
+- CUSTOM
+- UNKNOWN
+
+message_type:
+- pacs.008
+- pacs.009
+- camt.xxx
+- MT103
+- etc.
+
+A rule may have:
+
+message_family = MX
+message_type = UNKNOWN
+
+if there is enough evidence to establish ISO 20022/MX but not the exact message.
+
+Do not require exact message type just to establish message family.
+
+## 3. Review the six retained exceptions separately
+
+These are NOT one business-model ambiguity.
+
+Separate them into:
+
+### Confirmed source defects
+
+- CBPR_IN_OB_209023
+- CBPR_SG_OB_339182
+- CBPR_SG_OB_339183
+- CBPR_SG_OB_339184
+- CBPR_SG_OB_339185
+
+For these rules:
+
+- business understanding may remain UNDERSTOOD
+- structural_status = SOURCE_DEFECT
+- optimization_readiness = BLOCKED
+- do not count them as unresolved business-model gaps
+- do not change the generic parser
+
+### Market evidence conflict
+
+- CBPR_SG_IB_33273
+
+Keep this as a real business/market exception.
+
+Show the exact evidence:
+
+- explicit cond-country
+- MX receiveraddress-derived country
 - message family/type
-- channel/source conditions
-- flow signature
-- downstream behavior
-- transaction states
-- representative rules
+- sender geography
+- receiver geography
+- direction evidence
+- relevant BRT conditions
 
-If a business purpose is uncertain, say UNKNOWN or use a neutral technical name.
+Do not resolve this conflict automatically.
 
-## 2. Review the largest families first
+Produce one concise SME question specifically for this rule.
 
-Review at least:
+## 4. Review the 3 NEEDS_SME_INPUT families
 
-- top 20 largest business families
-- every family with >= 20 rules
-- every cross-market family
-- every family containing known source defects
-- every family containing partial business context
+Identify exactly why each family is marked NEEDS_SME_INPUT.
 
-For each family produce:
+For each:
 
 Family ID:
-Human-readable name:
+Human name:
 Rule count:
-Markets:
-Direction:
-Direction confidence:
-Channel/source:
-Message family:
-Important entry conditions:
-Typical business flow:
-Typical error/retry flow:
-Downstream system category:
-Transaction-state pattern:
-Terminal outcome:
-Representative rules:
-Known variants:
-Known defects:
-Confidence:
-SME question, if any:
+Affected rules:
+Missing business dimension:
+Existing evidence:
+What can already be concluded:
+Exact question requiring SME input:
 
-## 3. Validate family boundaries
+Do not ask me to review entire families if one shared answer can resolve them.
 
-For each reviewed family, sample at least 3 representative rules.
+## 5. Do not let known defects block business-model readiness
 
-Check whether they genuinely share:
+Change the decision logic:
 
-- business entry conditions
-- message family
-- business flow
-- major state transitions
-- terminal outcome
+Known source/configuration defects should be tracked separately from
+business-model completeness.
 
-Do not require exact implementation to match.
+A model can be ready for optimization discovery when:
 
-Classify the family:
+- business purpose is understood;
+- family boundaries are validated;
+- known malformed source rules are explicitly excluded/blocklisted;
+- unresolved business ambiguity is small and isolated.
 
-VALIDATED_FAMILY
-TOO_BROAD
-TOO_NARROW
-MIXED_BUSINESS_PURPOSE
-NEEDS_SME_INPUT
+Do not require malformed rules to become structurally valid before the
+business model itself can be considered complete.
 
-If TOO_BROAD or MIXED_BUSINESS_PURPOSE:
-propose a better family split.
-
-Do not change production rules.
-
-## 4. Review direction carefully
-
-Current direction is weak metadata inferred from rule IDs such as IB / OB.
-
-Keep:
-
-direction_source = rule_id_metadata
-direction_confidence = LOW or MEDIUM
-
-Do not promote this to strong business evidence unless supported by conditions
-or BRT knowledge.
-
-Try to find condition-based or flow-based direction evidence such as:
-
-- sender vs receiver role
-- channel ingress
-- message direction semantics
-- return/reply message type
-- BRT-specific conditions
-
-If no stronger evidence exists, retain the weak metadata explicitly.
-
-## 5. Separate business dimensions
-
-Keep these independent:
-
-market
-direction
-channel/source
-message family
-business conditions
-business flow
-downstream system
-transaction-state model
-error/retry model
-
-Do not infer market from downstream routing.
-
-Do not infer direction from market.
-
-Do not infer channel from destination.
-
-## 6. Cross-market family review
-
-For the families shared across:
-
-- MY + IN + SG
-- MY + IN
-- MY + SG
-- IN + SG
-
-produce a comparison showing:
-
-Shared business behavior:
-Different market conditions:
-Different channel/source conditions:
-Different downstream routing:
-Different transaction states:
-Different error handling:
-Different implementation nodes:
-
-The purpose is to determine whether they are truly the same business family
-with market-specific configuration, or merely structurally similar.
-
-Use classifications:
-
-SAME_BUSINESS_FAMILY
-RELATED_VARIANT
-STRUCTURALLY_SIMILAR_ONLY
-UNCERTAIN
-
-Do not call anything redundant yet.
-
-## 7. Review the 16 partial-context rules
-
-Group the 16 partial rules by shared missing information.
-
-Do not review one-by-one unless necessary.
-
-Report:
-
-Partial rules:
-Unique missing-context patterns:
-Rules per pattern:
-Question needed to resolve each pattern:
-
-## 8. Known defects
-
-Keep the known source defects separate from business-family validity.
-
-Examples include:
-- CBPR_IN_OB_209023
-- SG unmatched control-marker rules
-- SG receiver-side evidence conflict
-
-A family may still be business-valid even if one member is a source defect.
-
-## 9. Produce outputs
+## 6. Produce a concise SME decision sheet
 
 Create:
 
-analysis/business-family-review.md
-analysis/business-family-names.md
-analysis/cross-market-family-review.md
-analysis/partial-context-review.md
+analysis/sme-decision-sheet.md
 
-Update:
+It should contain ONLY questions that genuinely require business knowledge.
 
-analysis/business-families.json
+Target fewer than 5 questions.
 
-with fields such as:
+For every question include:
 
-human_name
-family_validation_status
-direction_source
-direction_confidence
-business_confidence
+- affected rule/family count
+- representative rules
+- current evidence
+- choices if appropriate
+- what changes after I answer
 
-## 10. Final decision
+Do not include questions that can be answered from existing local evidence.
 
-Report:
+## 7. Re-evaluate readiness
 
-Families reviewed:
-VALIDATED_FAMILY:
-TOO_BROAD:
-TOO_NARROW:
-MIXED_BUSINESS_PURPOSE:
-NEEDS_SME_INPUT:
+After this analysis report:
 
-Cross-market:
-SAME_BUSINESS_FAMILY:
-RELATED_VARIANT:
-STRUCTURALLY_SIMILAR_ONLY:
-UNCERTAIN:
+Validated business families:
+Families still needing SME input:
 
-Partial rules remaining:
-Business-model gaps remaining:
+Complete-context rules:
+Partial-context rules:
 
-Then recommend one of:
+Confirmed source defects:
+Actual unresolved business questions:
+
+Then recommend:
 
 READY_FOR_OPTIMIZATION_DISCOVERY
-BUSINESS_FAMILY_REFINEMENT_REQUIRED
+
+or
+
 MORE_SME_INPUT_REQUIRED
 
-Do NOT start optimization automatically.
+Do not start optimization automatically.
