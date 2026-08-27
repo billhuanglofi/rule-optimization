@@ -1,23 +1,24 @@
-### SME Resolution
+Apply the SME resolution for A02.
 
-Status: RESOLVED
+Use the existing local snapshot only. Do not re-query Oracle.
 
-Business rule:
+Update the classifier so that:
 
-`destination` / `routing_hub` values describe the downstream system or technical routing destination.
+1. destination/routing_hub is treated only as downstream-system / technical-routing information;
+2. destination/routing_hub must not be used as evidence for market_group;
+3. market classification must come from BRT-defined business conditions or approved mappings;
+4. rules previously marked ambiguous only because of routing_hub_not_market_proven should be re-evaluated;
+5. if no BRT-aligned market evidence exists, keep market unresolved rather than inferring it from destination;
+6. update phase-1-gaps.md with the number of rules resolved by this SME decision and the number still unresolved.
 
-They do **not** determine the business market category by themselves.
+Also move this rule into permanent project knowledge, for example:
+docs/business-rules.md or config/domain-mappings.yaml
 
-The market category is defined by the BRT (Business Rule Template) and should be derived from BRT-aligned business conditions/mappings, not from the destination value.
+--------
+### Destination vs market
 
-Therefore:
+`destination` / `routing_hub` represents downstream-system or technical-routing information.
 
-- treat `destination` / `routing_hub` as downstream-system information;
-- do not infer `market_group` from destination alone;
-- do not infer `destination_market` from destination alone unless an explicit BRT mapping says so;
-- preserve destination as a separate technical dimension;
-- determine market from BRT-defined conditions or approved business mappings;
-- if BRT-derived market evidence is missing, keep market as `UNKNOWN` or `PARTIAL` rather than guessing.
+It is not market evidence by itself.
 
-Confidence: HIGH
-Source: SME / BRT business definition
+Market classification must follow BRT-defined business logic or approved mappings.
