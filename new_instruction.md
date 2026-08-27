@@ -1,192 +1,203 @@
-# Phase 1.7 — Hierarchical Signatures and Scale Readiness
+# Phase 1.8 — CBPR_IN Cross-Market Pilot
 
-The CBPR_MY Phase 1 pilot is now validated.
+Proceed with CBPR_IN% as the next cross-market Phase 1 pilot.
 
-Do not start optimization.
+The objective is to validate that the Phase 1 framework generalizes beyond CBPR_MY.
 
-Do not modify the validated interpretation rules unless a new business
-conflict is discovered.
+Do not start Phase 2 optimization.
 
-## 1. Freeze the validated pilot
+## Important business-rule restriction
 
-Record the current baseline as:
+The following MY-specific rule MUST NOT be reused:
 
-PHASE_1_CBPR_MY_VALIDATED
+`cond-sendercountry = MY -> market_group = MY`
 
-Preserve:
+Do not automatically generalize this into:
 
-- current rules.jsonl
-- Phase 1 gaps/resolutions
-- Phase 1.5 market validation
-- Phase 1.6 flow validation
-- business-rules.md
-- node catalog
-- parser/generator version
+`cond-sendercountry = IN -> market_group = IN`
 
-Create a snapshot/version marker so later changes can be compared against it.
+unless the IN BRT or SME explicitly confirms that mapping.
 
-## 2. Add hierarchical rule signatures
+The following rule remains GLOBAL:
 
-The existing exact signature is too specific for family-level analysis.
+- destination / routing_hub describes technical downstream routing information;
+- destination / routing_hub is NOT independent market evidence.
 
-For every rule generate these independent signatures:
+## 1. Preserve the MY validated baseline
 
-### condition_signature
+Do not modify:
 
-Include normalized business entry conditions such as:
+- CBPR_MY validated snapshot;
+- MY Phase 1.5 validation;
+- MY Phase 1.6 validation;
+- MY business mappings.
 
-- market_group
-- country/sendercountry
-- currency
-- message type
-- product/service
-- important BRT condition dimensions
+Treat CBPR_MY as a frozen reference baseline.
 
-Exclude:
+## 2. Create a separate IN snapshot
 
-- rule ID
-- environment
-- destination unless destination is itself an explicit condition
+Scope:
 
-### flow_signature
+`CBPR_IN%`
 
-Represent major business actions in execution order.
+Use the same high-throughput architecture:
 
-Example:
+- bulk Oracle extraction;
+- zero per-rule Oracle queries;
+- local snapshot;
+- local deterministic parsing;
+- cached node semantics;
+- ambiguity clustering.
 
-VALIDATION
-> DUPLICATE_CHECK
-> SANCTIONS
-> ROUTING
-> PDP_REPORTING
-> PAYMENT_COMPLETION
+Create market-separated cache/output files so MY and IN results cannot overwrite each other.
 
-Normalize equivalent node IDs into common semantic categories.
+Suggested structure:
 
-Do not include implementation-only values that prevent useful clustering.
+analysis/markets/IN/
+analysis/cache/IN/
 
-### error_signature
+## 3. Reuse only approved semantics
 
-Represent error/retry structure independently.
+Reuse:
 
-Include:
+- GLOBAL business rules;
+- previously validated generic node semantics;
+- generic branch parsing;
+- generic transaction-state parsing;
+- hierarchical signature logic.
 
-- error block presence
-- retry block presence
-- replay/wiretap behavior
-- error terminal action
-- important error transaction states
+For the 5 node IDs that are new compared with MY:
 
-### exact_signature
+- inspect them once;
+- classify their semantics;
+- add them to the reusable node catalog only when meaning is clear.
 
-Retain the current detailed structural signature for exact comparison.
+Report these new nodes separately.
 
-## 3. Produce clustering statistics
+## 4. Discover IN market evidence
+
+Do NOT pre-classify the 235 rules as IN merely because:
+
+- their IDs contain `CBPR_IN`;
+- the extraction scope is `CBPR_IN%`.
+
+The scope selects the population but is not market evidence.
+
+Run the deterministic classifier and identify the actual BRT-aligned condition patterns used by these rules.
+
+Possible evidence may include:
+
+- explicit country condition;
+- sender-country condition;
+- receiver-country condition;
+- product/BRT-specific condition;
+- approved mapping.
+
+Do not invent mappings.
+
+## 5. Generate gaps before asking for manual rule review
+
+If some rules cannot be classified confidently, cluster them by shared cause.
 
 Create:
 
-analysis/signature-analysis.md
+`analysis/markets/IN/phase-1-gaps.md`
+
+Prefer:
+
+"78 rules affected by 2 ambiguity patterns"
+
+instead of:
+
+"78 rules need individual review."
+
+For each ambiguity provide:
+
+- affected rule count;
+- shared condition pattern;
+- representative examples;
+- exact question for SME;
+- evidence already available.
+
+I will answer BRT questions after this first pass.
+
+## 6. Generate hierarchical signatures
+
+For every IN rule generate:
+
+- condition_signature
+- flow_signature
+- error_signature
+- exact_signature
+
+Then compare IN against MY at the FAMILY level.
+
+Create:
+
+`analysis/cross-market/MY-vs-IN.md`
 
 Report:
 
-Rules:
-Unique condition signatures:
-Unique flow signatures:
-Unique error signatures:
-Unique exact signatures:
+### Shared semantics
+- node IDs shared
+- flow families shared
+- error families shared
 
-Top 20 condition clusters:
-Top 20 flow clusters:
-Top 20 error clusters:
+### New IN semantics
+- new node IDs
+- new flow families
+- new error families
+- new condition dimensions
 
-For each cluster include:
+### Different business configuration
+Identify cases where the same flow structure exists in MY and IN but differs only by:
+- market conditions;
+- currency;
+- destination;
+- processor;
+- transaction state;
+- endpoint/global variable.
 
-- number of rules
-- representative rule IDs
-- important common characteristics
+Do NOT call these duplicates or optimization candidates yet.
 
-Do not label anything as redundant yet.
+## 7. Required first-pass IN metrics
 
-## 4. Detect differences inside families
+Report:
 
-For rules sharing the same flow_signature but different exact_signature,
-summarize the dimensions causing the differences.
+Rules processed:
+Node rows:
+Unique node IDs:
+New node IDs vs MY:
 
-Examples:
+UNDERSTOOD:
+PARTIAL:
+UNKNOWN:
+NEEDS_REVIEW:
 
-same flow, different:
-- currency
-- market condition
-- destination
-- transaction state
-- callback configuration
-- error behavior
-- payload flag
-- implementation node
+Unique ambiguity patterns:
+Rules affected by ambiguity:
 
-Create:
+Condition signatures:
+Flow signatures:
+Error signatures:
+Exact signatures:
 
-analysis/signature-differences.md
+Shared flow signatures with MY:
+New flow signatures vs MY:
 
-The purpose is understanding, not optimization.
+Oracle calls:
+Processing duration:
 
-## 5. Prepare cross-market validation
+## 8. Decision gate
 
-Do not run the entire estate immediately.
+At the end return one of:
 
-Identify 2–3 additional rule populations that are structurally or
-business-wise different from CBPR_MY.
+IN_BRT_INPUT_REQUIRED
+IN_PILOT_READY_FOR_VALIDATION
+PARSER_EXTENSION_REQUIRED
 
-Prefer populations that exercise different:
+Do not automatically resolve BRT-specific ambiguity.
 
-- market/BRT mappings
-- currencies
-- destinations/processors
-- message types
-- flow families
+Do not automatically start Phase 1.5/1.6 validation.
 
-For each candidate report:
-
-- estimated rule count
-- node count
-- unique node IDs
-- new node IDs not seen in CBPR_MY
-- expected business-rule gaps
-
-Do not classify a new market using MY-specific fallback rules unless
-the BRT explicitly says they are reusable.
-
-## 6. Business-rule scoping
-
-Review all permanent business rules.
-
-Classify each as:
-
-GLOBAL
-MARKET_SPECIFIC
-BRT_SPECIFIC
-PILOT_ONLY
-
-For example:
-
-Destination/routing_hub is not market evidence
-→ likely GLOBAL
-
-cond-sendercountry = MY -> market_group = MY
-→ MY/BRT-specific
-
-Do not apply market-specific mappings globally.
-
-Create:
-
-docs/business-rule-scope.md
-
-## 7. Decision gate
-
-Recommend one of:
-
-READY_FOR_CROSS_MARKET_PILOT
-NEEDS_TAXONOMY_WORK
-NEEDS_PARSER_WORK
-
-Do not start Phase 2 optimization automatically.
+Do not start SG, HK, the full estate, or Phase 2.
