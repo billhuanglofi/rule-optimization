@@ -1,24 +1,55 @@
-Apply the SME resolution for A02.
+# Phase 1.5 — Validate the CBPR_MY Classifier
 
-Use the existing local snapshot only. Do not re-query Oracle.
+Do not optimize rules yet.
 
-Update the classifier so that:
+The CBPR_MY pilot now reports:
 
-1. destination/routing_hub is treated only as downstream-system / technical-routing information;
-2. destination/routing_hub must not be used as evidence for market_group;
-3. market classification must come from BRT-defined business conditions or approved mappings;
-4. rules previously marked ambiguous only because of routing_hub_not_market_proven should be re-evaluated;
-5. if no BRT-aligned market evidence exists, keep market unresolved rather than inferring it from destination;
-6. update phase-1-gaps.md with the number of rules resolved by this SME decision and the number still unresolved.
+- 507 rules processed
+- 507 UNDERSTOOD
+- 0 PARTIAL
+- 0 UNKNOWN
+- 0 NEEDS_REVIEW
+- 0 remaining ambiguity patterns
 
-Also move this rule into permanent project knowledge, for example:
-docs/business-rules.md or config/domain-mappings.yaml
+Before scaling to the full rule estate, validate that these classifications are correct and that SME rules were not over-applied.
 
---------
-### Destination vs market
+Use the existing local snapshot only unless a specific validation question requires new DB evidence.
 
-`destination` / `routing_hub` represents downstream-system or technical-routing information.
+## 1. Validate market evidence
 
-It is not market evidence by itself.
+For every rule, verify that `market_group = MY` has an explicit evidence path.
 
-Market classification must follow BRT-defined business logic or approved mappings.
+Allowed evidence paths currently include:
+
+### Path A — explicit BRT-aligned market/country condition
+
+Example:
+
+`cond-country = MY`
+
+### Path B — approved SME fallback
+
+When no explicit country/market condition exists:
+
+`cond-sendercountry = MY`
+→ `market_group = MY`
+
+### Not allowed as market evidence
+
+The following MUST NOT independently classify market as MY:
+
+- rule ID/name containing `MY`
+- destination
+- routing_hub
+- processor
+- endpoint
+- deployment environment
+- arbitrary occurrence of the text `MY`
+
+For every one of the 507 records, add a normalized field such as:
+
+```json
+"market_classification_source": {
+  "type": "explicit_country|sendercountry_fallback|approved_mapping",
+  "evidence": ["..."]
+}
