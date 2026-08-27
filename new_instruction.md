@@ -1,79 +1,97 @@
-## Ambiguity A01: branch structure issue
+Read my SME comments in analysis/markets/IN/phase-1-gaps.md and apply them.
 
-Affected rules: 1
+Do not query Oracle. Use the existing IN local snapshot.
 
-Representative rule:
-- `CBPR_IN_OB_209023`
+1. Convert resolved SME comments into permanent business knowledge.
 
-### SME Resolution
+For the IN outbound market rule:
+- scope it as BRT_SPECIFIC
+- market = IN
+- direction = OUTBOUND
+- approved evidence includes:
+  - sendercountry = IN
+  - approved BRT condition meaning "from HSBC"
+  - approved BRT condition meaning "from HASE"
 
-Status: RESOLVED_AS_SOURCE_DEFECT
+Before applying HSBC/HASE logic, identify the exact normalized node/condition
+representing those meanings. Do not use arbitrary text matching.
 
-`CBPR_IN_OB_209023` has an incorrect rule setup.
+Do not infer market from:
+- rule ID
+- CBPR_IN scope
+- destination
+- routing_hub
+- processor
+- endpoint
 
-The following structure is not an intentional supported control-flow pattern:
+2. For CBPR_IN_OB_209023:
 
-- `block-on-error`
-- `act-pol-sms-retry-service`
-- `block-on-retry-end`
+My SME decision is that the rule setup is wrong.
 
-The parser must NOT reinterpret or automatically repair this sequence.
+Treat it as:
+SOURCE_DEFECT / NEEDS_REVIEW
 
-Classification:
+Do not modify the generic branch parser to accept this structure.
+Do not automatically repair or reinterpret its block markers.
 
-- source/rule configuration defect
-- keep structural validation status as `NEEDS_REVIEW`
-- exclude this rule from assertions that require valid error/retry block pairing
-- do not use this example to change the generic branch parser
+Its market classification may still be determined independently from valid
+market evidence.
 
-The rule may still receive independent market/condition classification if valid market evidence exists.
+3. Regenerate all 235 IN rule records from the existing cache.
 
-Action for later phase:
-Correct the production rule setup through the normal rule-change process.
+Report:
 
+Rules processed:
+UNDERSTOOD:
+PARTIAL:
+UNKNOWN:
+NEEDS_REVIEW:
 
+Market evidence sources:
+- explicit_country
+- outbound_sendercountry
+- outbound_HSBC
+- outbound_HASE
+- other approved mapping
 
-## Ambiguity A02: missing approved IN market evidence
+Remaining rules without approved market evidence:
 
-Affected rules: 40
+Known source defects:
+- rule ID
+- offending ranks/nodes
+- reason
 
-### SME Resolution
+Remaining SME ambiguity patterns:
 
-Status: RESOLVED
+4. Update phase-1-gaps.md.
 
-This is an IN BRT-specific market classification rule.
+Resolved SME questions should be marked RESOLVED and retained as history.
 
-For an OUTBOUND rule:
+Do not delete the explanation of how they were resolved.
 
-IF any approved IN-origin evidence is present:
+A known source defect such as CBPR_IN_OB_209023 should move out of the
+"unanswered SME ambiguity" count and into a separate structural/source-defect
+section.
 
-- sender institution is HSBC; OR
-- sender institution is HASE; OR
-- `cond-sendercountry = IN`
+5. If no unresolved market ambiguity remains, run IN market-evidence validation.
 
-THEN:
+Verify that every IN classification has an approved BRT evidence path.
 
-- classify `market_group = IN`
-- confidence = HIGH
-- record the exact matched condition as market evidence
+Do not count CBPR_IN_OB_209023's structural defect as a market-classification
+failure if its market evidence is independently valid.
 
-This mapping applies to OUTBOUND rules only.
+6. Then select approximately 20-25 representative IN rules and run the same
+semantic-flow validation used for the validated MY pilot.
 
-### Important restrictions
+If:
+- market evidence validation passes;
+- semantic-flow sample has no material parser errors;
+- the only remaining issue is the confirmed source defect;
 
-- `CBPR_IN%` in the rule ID is not market evidence.
-- extraction scope is not market evidence.
-- destination/routing_hub is not market evidence.
-- processor or endpoint is not market evidence.
-- do not apply this outbound rule to inbound rules.
-- do not generalize this mapping to another market without its BRT/SME approval.
+then mark:
 
-### Precedence
+PHASE_1_CBPR_IN_VALIDATED_WITH_KNOWN_SOURCE_DEFECTS
 
-1. Explicit approved country/market condition.
-2. Approved IN outbound BRT evidence:
-   - sender institution = HSBC
-   - sender institution = HASE
-   - sendercountry = IN
-3. If evidence conflicts, use `NEEDS_REVIEW`.
-4. If no approved evidence exists, keep market unresolved.
+Freeze the IN baseline.
+
+Do not start SG or Phase 2 automatically.
