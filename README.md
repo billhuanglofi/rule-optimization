@@ -1,64 +1,43 @@
-# Rule Optimization AI Starter
+# Rule Optimization — Phase 1 Fast Starter
 
-This repository is a shared, tool-agnostic workspace for understanding and later optimizing our RULE-based payment/routing logic.
+This repository is for understanding and later optimizing RULE-based payment/routing logic.
 
-The project is intentionally **phase-based**. Phase 1 is discovery only: understand what each rule does, which market/business context it belongs to, and which flow(s) it participates in. Do **not** optimize or rewrite rules during Phase 1.
+Current focus: **Phase 1 — understand and classify rules at scale.**
 
-## Project goals
+Core execution model:
 
-1. Build a trustworthy inventory of existing rules.
-2. Classify each rule by market, flow, purpose, conditions, actions, dependencies, and error/retry behavior.
-3. Make the inventory understandable to both engineers and AI assistants.
-4. Use evidence from SQL / DB metadata rather than guessing from names.
-5. Create a stable baseline before later optimization work.
+> **Bulk extract once → cache locally → parse deterministically → use AI only for ambiguity.**
 
-## Suggested repository layout
+Do not optimize, delete, merge, reorder, or rewrite production rules during Phase 1.
+
+## Layout
 
 ```text
 .
 ├── AGENTS.md
 ├── README.md
 ├── docs/
-│   ├── 01-domain-context.md
-│   ├── 02-phase-1-rule-understanding.md
-│   ├── 03-rule-taxonomy.md
-│   └── 04-output-contract.md
+│   ├── 01-phase-1-fast-workflow.md
+│   ├── 02-rule-taxonomy.md
+│   └── 03-performance-and-batching.md
+├── prompts/
+│   └── run-phase1-fast.md
 └── templates/
     └── rule-card.md
 ```
 
-## Phases
+## Phase 1 deliverables
 
-### Phase 1 — Understand and classify
-
-For every rule:
-
-- identify its purpose;
-- identify market / geography evidence;
-- identify payment or message flow(s);
-- identify entry conditions;
-- identify major actions;
-- identify main path, retry path, and error path;
-- identify external/global-variable dependencies;
-- identify transaction-state changes;
-- record uncertainty explicitly.
-
-**Deliverable:** rule inventory + per-rule cards + cross-rule indexes.
-
-### Phase 2 — Detect overlap and duplication
-
-Compare rules with similar conditions, markets, actions, and destinations.
-
-### Phase 3 — Optimization candidates
-
-Find redundant checks, duplicated nodes, unnecessary branches, inconsistent routing, stale rules, and opportunities for shared components.
-
-### Phase 4 — Change design and validation
-
-Propose changes, simulate DB impact, validate rule invariants, and prepare safe PRs.
+- machine-readable `analysis/rules.jsonl`
+- rule inventory
+- index by market
+- index by flow
+- transaction-state index
+- ambiguity/gaps report
+- optional detailed rule cards for ambiguous or selected rules
 
 ## Working rule
 
 > Evidence first. Interpretation second. Optimization later.
 
-Do not silently infer missing business meaning. Mark it as `UNKNOWN` and list what evidence would resolve it.
+Use `UNKNOWN` when business meaning cannot be proven.

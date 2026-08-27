@@ -1,6 +1,6 @@
 # Rule: `<RULE_ID>`
 
-## 1. Metadata
+## Metadata
 
 ```yaml
 rule_id: ""
@@ -10,15 +10,15 @@ node_count: 0
 status: UNDERSTOOD|PARTIAL|UNKNOWN|NEEDS_REVIEW
 ```
 
-## 2. Business summary
+## Business summary
 
-Write 2–5 sentences answering:
+Answer:
 
 - What traffic reaches this rule?
-- What does the rule do?
+- What does it do?
 - What is the final outcome?
 
-## 3. Market classification
+## Market classification
 
 ```yaml
 origin_market:
@@ -45,7 +45,7 @@ routing_hub:
   evidence: []
 ```
 
-## 4. Flow classification
+## Flow classification
 
 ```yaml
 flows:
@@ -54,17 +54,17 @@ flows:
     evidence: []
 ```
 
-## 5. Conditions
+## Conditions
 
 | Rank | Node ID | Dimension | Operator | Value | Evidence/Notes |
 |---:|---|---|---|---|---|
 
-## 6. Ordered node flow
+## Ordered node flow
 
 | Rank | Branch | Node ID | Type | Short interpretation | Important verb fields |
 |---:|---|---|---|---|---|
 
-## 7. Main path
+## Main path
 
 ```text
 IF ...
@@ -72,7 +72,7 @@ THEN ...
 ENDS WITH ...
 ```
 
-## 8. Error path
+## Error path
 
 ```yaml
 present: false
@@ -83,7 +83,7 @@ replay_or_wiretap: ""
 completion_node: ""
 ```
 
-## 9. Retry path
+## Retry path
 
 ```yaml
 present: false
@@ -92,7 +92,7 @@ end_rank:
 behavior: ""
 ```
 
-## 10. Dependencies
+## Dependencies
 
 ### Global variables
 
@@ -104,17 +104,12 @@ behavior: ""
 | Name | Type | Evidence | Used at rank |
 |---|---|---|---:|
 
-### Payload dependencies
-
-| Consumer rank | Flag/value | Required producer | Producer rank | Satisfied? |
-|---:|---|---|---:|---|
-
-## 11. Transaction states
+## Transaction states
 
 | Rank | State | Meaning / context | Branch |
 |---:|---|---|---|
 
-## 12. Terminal behavior
+## Terminal behavior
 
 ```yaml
 main_terminal_node: UNKNOWN
@@ -123,7 +118,13 @@ error_terminal_node: UNKNOWN
 retry_terminal_node: UNKNOWN
 ```
 
-## 13. Evidence quality
+## Rule signature
+
+```text
+<normalized signature>
+```
+
+## Evidence quality
 
 ```yaml
 overall_confidence: LOW|MEDIUM|HIGH
@@ -133,11 +134,11 @@ weak_or_inferred:
   - ""
 ```
 
-## 14. Open questions
+## Open questions
 
 - None yet.
 
-## 15. Optimization observations for later
+## Optimization observations for later
 
 Do not change the rule in Phase 1.
 
