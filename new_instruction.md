@@ -1,30 +1,23 @@
 ### SME Resolution
 
-Status: PARTIALLY_RESOLVED
+Status: RESOLVED
 
 Business rule:
 
-IF:
-- no explicit country/market condition exists; AND
-- `cond-sendercountry` exists; AND
-- its normalized value is `MY`
+`destination` / `routing_hub` values describe the downstream system or technical routing destination.
 
-THEN:
-- classify the rule market as `MY`;
-- confidence = HIGH;
-- use the `cond-sendercountry` node/rank/value as evidence.
+They do **not** determine the business market category by themselves.
 
-Example evidence:
+The market category is defined by the BRT (Business Rule Template) and should be derived from BRT-aligned business conditions/mappings, not from the destination value.
 
-`cond-sendercountry = MY`
-→ market = MY
+Therefore:
 
-Precedence:
+- treat `destination` / `routing_hub` as downstream-system information;
+- do not infer `market_group` from destination alone;
+- do not infer `destination_market` from destination alone unless an explicit BRT mapping says so;
+- preserve destination as a separate technical dimension;
+- determine market from BRT-defined conditions or approved business mappings;
+- if BRT-derived market evidence is missing, keep market as `UNKNOWN` or `PARTIAL` rather than guessing.
 
-1. Explicit country/market condition wins.
-2. Otherwise use `cond-sendercountry = MY`.
-3. If neither is available, keep the market unresolved.
-4. If signals conflict, do not guess; mark `NEEDS_REVIEW`.
-
-Do not classify a rule as MY merely because the text `MY`
-appears somewhere else in the rule.
+Confidence: HIGH
+Source: SME / BRT business definition
