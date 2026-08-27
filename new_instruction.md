@@ -1,55 +1,120 @@
-# Phase 1.5 — Validate the CBPR_MY Classifier
+# Phase 1.6 — Semantic Flow Validation
 
-Do not optimize rules yet.
+The market-classification validation has passed.
 
-The CBPR_MY pilot now reports:
+Do not query Oracle again. Use the existing local snapshot.
 
-- 507 rules processed
-- 507 UNDERSTOOD
-- 0 PARTIAL
-- 0 UNKNOWN
-- 0 NEEDS_REVIEW
-- 0 remaining ambiguity patterns
+The purpose of this step is to validate that the deterministic parser
+correctly understands rule flow semantics, not only market classification.
 
-Before scaling to the full rule estate, validate that these classifications are correct and that SME rules were not over-applied.
+## 1. Select a representative sample
 
-Use the existing local snapshot only unless a specific validation question requires new DB evidence.
+Select approximately 25 rules from the existing 507-rule pilot.
 
-## 1. Validate market evidence
+Include:
 
-For every rule, verify that `market_group = MY` has an explicit evidence path.
+- 5 simple rules
+- 5 rules using the sendercountry fallback
+- 5 rules with the largest node counts
+- 4 rules containing retry/error branches
+- 3 rules with unusual transaction-state sequences
+- 3 rules from the largest shared/similar signature groups
 
-Allowed evidence paths currently include:
+A rule may satisfy more than one category.
 
-### Path A — explicit BRT-aligned market/country condition
+## 2. Produce compact semantic reviews
 
-Example:
+For each sampled rule show:
 
-`cond-country = MY`
+### Rule ID
 
-### Path B — approved SME fallback
+Market:
+- value
+- classification source
 
-When no explicit country/market condition exists:
+Entry conditions:
+- ordered condition nodes
+- normalized meaning
 
-`cond-sendercountry = MY`
-→ `market_group = MY`
+Main flow:
+- ordered major actions
 
-### Not allowed as market evidence
+Error flow:
+- start/end ranks
+- major actions
+- terminal action
 
-The following MUST NOT independently classify market as MY:
+Retry flow:
+- start/end ranks
+- major actions
+- terminal action
 
-- rule ID/name containing `MY`
-- destination
-- routing_hub
-- processor
-- endpoint
-- deployment environment
-- arbitrary occurrence of the text `MY`
+Transaction states:
+- ordered values and ranks
 
-For every one of the 507 records, add a normalized field such as:
+External dependencies:
+- routing hub
+- processor/service
+- global variables
 
-```json
-"market_classification_source": {
-  "type": "explicit_country|sendercountry_fallback|approved_mapping",
-  "evidence": ["..."]
-}
+Terminal behavior:
+- final meaningful main-path node
+
+Parser assessment:
+- PASS
+- QUESTION
+- FAIL
+
+Do not create verbose prose.
+
+## 3. Validate structural correctness
+
+Check that:
+
+- nodes are interpreted in rank order;
+- error/retry blocks are correctly separated from the main path;
+- block start/end markers are correctly paired;
+- transaction states are attached to the correct branch;
+- payment completion is correctly identified where applicable;
+- destination/routing hub remains technical information;
+- conditions are not accidentally interpreted as actions;
+- actions are not accidentally interpreted as conditions.
+
+## 4. Create a validation report
+
+Create:
+
+analysis/phase-1.6-flow-validation.md
+
+Summary:
+
+Sample size:
+PASS:
+QUESTION:
+FAIL:
+
+Branch parsing errors:
+Condition parsing errors:
+Transaction-state errors:
+Terminal-action errors:
+Unknown node semantics:
+
+List every QUESTION/FAIL explicitly.
+
+## 5. Decision gate
+
+If there are zero material FAIL results and any QUESTION items are
+understood/shared semantic issues rather than parser defects:
+
+mark:
+
+PHASE_1_PILOT_VALIDATED
+
+Otherwise:
+
+- identify the shared cause;
+- fix the parser or business mapping;
+- regenerate from local cache;
+- repeat this validation.
+
+Do not start Phase 2 automatically.
