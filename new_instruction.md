@@ -1,228 +1,248 @@
-Begin Phase 2A — Business Model Discovery.
+# Phase 2B — Business Family Review and Naming
+
+The Phase 2A business-model discovery is complete.
 
 Do NOT optimize, merge, delete, or rewrite rules yet.
 
-The purpose of this phase is to infer a structured business model from the
-validated rule data for MY, IN, and SG.
+The goal of this phase is to make the discovered business model understandable
+to engineers and SMEs, and to validate that the 124 business families represent
+real business patterns rather than accidental technical clustering.
 
-Use the existing local snapshots and validated classifications only.
-Do not query Oracle unless a specific missing fact cannot be obtained locally.
+Use existing local data only.
+Do not query Oracle unless a specific missing fact cannot be resolved locally.
 
-1. Preserve the validated rule-level evidence.
+## 1. Preserve existing family IDs
 
-Do not replace detailed rule records.
+Keep stable IDs such as:
 
-Business-model conclusions must remain traceable back to:
-- rule IDs
-- conditions
-- node ranks
-- flow signatures
+BF001
+BF002
+BF003
+
+Do not renumber them.
+
+Add a human-readable business name and description.
+
+Example:
+
+BF001
+Human name:
+SG MX GPI inbound payment-receipt flow
+
+Do not invent names from rule IDs alone.
+
+Use evidence from:
+- market conditions
+- message family/type
+- channel/source conditions
+- flow signature
+- downstream behavior
 - transaction states
-- approved SME/BRT mappings
+- representative rules
 
-2. Build a normalized business-context model.
+If a business purpose is uncertain, say UNKNOWN or use a neutral technical name.
 
-For every rule derive, where evidence exists:
+## 2. Review the largest families first
+
+Review at least:
+
+- top 20 largest business families
+- every family with >= 20 rules
+- every cross-market family
+- every family containing known source defects
+- every family containing partial business context
+
+For each family produce:
+
+Family ID:
+Human-readable name:
+Rule count:
+Markets:
+Direction:
+Direction confidence:
+Channel/source:
+Message family:
+Important entry conditions:
+Typical business flow:
+Typical error/retry flow:
+Downstream system category:
+Transaction-state pattern:
+Terminal outcome:
+Representative rules:
+Known variants:
+Known defects:
+Confidence:
+SME question, if any:
+
+## 3. Validate family boundaries
+
+For each reviewed family, sample at least 3 representative rules.
+
+Check whether they genuinely share:
+
+- business entry conditions
+- message family
+- business flow
+- major state transitions
+- terminal outcome
+
+Do not require exact implementation to match.
+
+Classify the family:
+
+VALIDATED_FAMILY
+TOO_BROAD
+TOO_NARROW
+MIXED_BUSINESS_PURPOSE
+NEEDS_SME_INPUT
+
+If TOO_BROAD or MIXED_BUSINESS_PURPOSE:
+propose a better family split.
+
+Do not change production rules.
+
+## 4. Review direction carefully
+
+Current direction is weak metadata inferred from rule IDs such as IB / OB.
+
+Keep:
+
+direction_source = rule_id_metadata
+direction_confidence = LOW or MEDIUM
+
+Do not promote this to strong business evidence unless supported by conditions
+or BRT knowledge.
+
+Try to find condition-based or flow-based direction evidence such as:
+
+- sender vs receiver role
+- channel ingress
+- message direction semantics
+- return/reply message type
+- BRT-specific conditions
+
+If no stronger evidence exists, retain the weak metadata explicitly.
+
+## 5. Separate business dimensions
+
+Keep these independent:
 
 market
 direction
-channel_or_instruction_source
-message_family
-message_type
-currency
-sender_geography
-receiver_geography
-participant/institution conditions
-business/product conditions
-flow_family
-error_family
-downstream_systems
-transaction_states
-terminal_outcome
+channel/source
+message family
+business conditions
+business flow
+downstream system
+transaction-state model
+error/retry model
 
-Use UNKNOWN where evidence is insufficient.
+Do not infer market from downstream routing.
 
-Do not infer fields from rule names unless explicitly marked as weak metadata.
+Do not infer direction from market.
 
-3. Keep these concepts separate.
+Do not infer channel from destination.
 
-MARKET:
-business/geographic classification derived primarily from approved conditions.
+## 6. Cross-market family review
 
-DIRECTION:
-inbound / outbound / return / internal / unknown.
+For the families shared across:
 
-CHANNEL / SOURCE:
-where the instruction entered from, for example GPI, XSSL, TEC, or prs-* flows.
+- MY + IN + SG
+- MY + IN
+- MY + SG
+- IN + SG
 
-MESSAGE FAMILY:
-MX / MT / custom / unknown.
+produce a comparison showing:
 
-DOWNSTREAM SYSTEM:
-routing hub, processor, service, endpoint.
+Shared business behavior:
+Different market conditions:
+Different channel/source conditions:
+Different downstream routing:
+Different transaction states:
+Different error handling:
+Different implementation nodes:
 
-Do not treat channel, destination, routing hub, processor, or rule ID as market.
+The purpose is to determine whether they are truly the same business family
+with market-specific configuration, or merely structurally similar.
 
-4. Apply the validated MX rule.
+Use classifications:
 
-For MX / ISO 20022 traffic:
-- receiver-side geography normally determines market after an explicit approved
-  cond-country rule;
-- sender/receiver geography differences are not automatically conflicts;
-- retain both sender and receiver geography.
+SAME_BUSINESS_FAMILY
+RELATED_VARIANT
+STRUCTURALLY_SIMILAR_ONLY
+UNCERTAIN
 
-5. Discover business families.
+Do not call anything redundant yet.
 
-Cluster rules using business-level dimensions rather than exact implementation.
+## 7. Review the 16 partial-context rules
 
-Suggested family key:
+Group the 16 partial rules by shared missing information.
 
-market
-+ direction
-+ channel/source
-+ message family
-+ major condition family
-+ normalized flow signature
-
-Do not include:
-- rule ID
-- exact endpoint
-- exact global variable name
-- implementation-only node differences
-
-unless they materially change business behavior.
-
-6. For each discovered business family produce:
-
-Business family name:
-Markets:
-Directions:
-Channels:
-Message families:
-Typical entry conditions:
-Typical main flow:
-Typical error/retry flow:
-Typical transaction-state progression:
-Typical terminal outcome:
-Downstream system categories:
-Number of rules:
-Representative rules:
-Known variants:
-Known exceptions:
-Confidence:
-Open business questions:
-
-Do not call differences redundant yet.
-
-7. Build business-condition matrices.
-
-Create a matrix showing which condition dimensions define each business family.
-
-For example:
-
-Family | Market | Direction | Channel | Message | Currency | Sender | Receiver | Flow
-
-The goal is to see which conditions actually distinguish business behavior.
-
-8. Build cross-market comparison.
-
-Compare MY, IN, and SG at the business-family level.
-
-Identify:
-
-- business families shared across all markets;
-- families shared by two markets;
-- market-specific families;
-- same business flow with different market conditions;
-- same conditions with different downstream routing;
-- same flow with different error behavior.
-
-Do NOT classify these as optimization candidates yet.
-
-9. Build a business flow model.
-
-Create a high-level model such as:
-
-Channel / Source
-    ↓
-Entry Conditions
-    ↓
-Validation
-    ↓
-Business Processing
-    ↓
-Routing / Processor
-    ↓
-Reporting
-    ↓
-Completion
-
-with optional branches:
-
-Error
-Retry
-Replay
-Callback
-
-Derive the actual stages from evidence rather than forcing every rule into this
-example.
-
-10. Required outputs
-
-Create:
-
-docs/business-model.md
-analysis/business-families.md
-analysis/business-condition-matrix.md
-analysis/business-flow-model.md
-analysis/cross-market-business-model.md
-analysis/business-model-gaps.md
-
-Also create a machine-readable form:
-
-analysis/business-families.json
-
-11. Business-model gaps
-
-Only create a gap when business meaning cannot be established safely.
-
-Cluster gaps by shared question.
-
-Examples:
-
-- meaning of a channel condition
-- direction cannot be determined
-- transaction-state meaning unknown
-- two flows look structurally identical but business purpose is unclear
-
-Do not ask one question per rule.
-
-12. Final report
+Do not review one-by-one unless necessary.
 
 Report:
 
-Rules modeled:
-Business families:
-Cross-market families:
-Market-specific families:
-Direction families:
-Channel/source families:
-Message families:
-Flow families:
+Partial rules:
+Unique missing-context patterns:
+Rules per pattern:
+Question needed to resolve each pattern:
 
-Rules with complete business context:
-Rules with partial business context:
+## 8. Known defects
 
-Unique business-model gaps:
-Rules affected by gaps:
+Keep the known source defects separate from business-family validity.
 
-Largest business families:
-Most common flow families:
-Most common condition dimensions:
+Examples include:
+- CBPR_IN_OB_209023
+- SG unmatched control-marker rules
+- SG receiver-side evidence conflict
 
-Then recommend whether the project is ready for:
-BUSINESS_MODEL_REVIEW
-or
-MORE_DOMAIN_INPUT_REQUIRED
+A family may still be business-valid even if one member is a source defect.
 
-Do not start optimization automatically.
+## 9. Produce outputs
+
+Create:
+
+analysis/business-family-review.md
+analysis/business-family-names.md
+analysis/cross-market-family-review.md
+analysis/partial-context-review.md
+
+Update:
+
+analysis/business-families.json
+
+with fields such as:
+
+human_name
+family_validation_status
+direction_source
+direction_confidence
+business_confidence
+
+## 10. Final decision
+
+Report:
+
+Families reviewed:
+VALIDATED_FAMILY:
+TOO_BROAD:
+TOO_NARROW:
+MIXED_BUSINESS_PURPOSE:
+NEEDS_SME_INPUT:
+
+Cross-market:
+SAME_BUSINESS_FAMILY:
+RELATED_VARIANT:
+STRUCTURALLY_SIMILAR_ONLY:
+UNCERTAIN:
+
+Partial rules remaining:
+Business-model gaps remaining:
+
+Then recommend one of:
+
+READY_FOR_OPTIMIZATION_DISCOVERY
+BUSINESS_FAMILY_REFINEMENT_REQUIRED
+MORE_SME_INPUT_REQUIRED
+
+Do NOT start optimization automatically.
