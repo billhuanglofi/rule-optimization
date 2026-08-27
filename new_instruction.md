@@ -30,3 +30,50 @@ The rule may still receive independent market/condition classification if valid 
 
 Action for later phase:
 Correct the production rule setup through the normal rule-change process.
+
+
+
+## Ambiguity A02: missing approved IN market evidence
+
+Affected rules: 40
+
+### SME Resolution
+
+Status: RESOLVED
+
+This is an IN BRT-specific market classification rule.
+
+For an OUTBOUND rule:
+
+IF any approved IN-origin evidence is present:
+
+- sender institution is HSBC; OR
+- sender institution is HASE; OR
+- `cond-sendercountry = IN`
+
+THEN:
+
+- classify `market_group = IN`
+- confidence = HIGH
+- record the exact matched condition as market evidence
+
+This mapping applies to OUTBOUND rules only.
+
+### Important restrictions
+
+- `CBPR_IN%` in the rule ID is not market evidence.
+- extraction scope is not market evidence.
+- destination/routing_hub is not market evidence.
+- processor or endpoint is not market evidence.
+- do not apply this outbound rule to inbound rules.
+- do not generalize this mapping to another market without its BRT/SME approval.
+
+### Precedence
+
+1. Explicit approved country/market condition.
+2. Approved IN outbound BRT evidence:
+   - sender institution = HSBC
+   - sender institution = HASE
+   - sendercountry = IN
+3. If evidence conflicts, use `NEEDS_REVIEW`.
+4. If no approved evidence exists, keep market unresolved.
