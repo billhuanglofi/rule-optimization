@@ -1,170 +1,228 @@
-Update the market-classification logic with the following SME/BRT clarification.
+Begin Phase 2A — Business Model Discovery.
 
-# MX / ISO 20022 Market Classification Rule
+Do NOT optimize, merge, delete, or rewrite rules yet.
 
-For ISO 20022 MX messages, including message families such as:
+The purpose of this phase is to infer a structured business model from the
+validated rule data for MY, IN, and SG.
 
-- pacs.*
-- camt.*
-- other approved MX message types
+Use the existing local snapshots and validated classifications only.
+Do not query Oracle unless a specific missing fact cannot be obtained locally.
 
-the business market normally follows the receiver side, especially the country represented by receiveraddress.
+1. Preserve the validated rule-level evidence.
 
-This rule applies only when the message has been positively identified as MX / ISO 20022.
+Do not replace detailed rule records.
 
-## 1. Identify MX first
+Business-model conclusions must remain traceable back to:
+- rule IDs
+- conditions
+- node ranks
+- flow signatures
+- transaction states
+- approved SME/BRT mappings
 
-Determine whether the rule applies to an MX message using an explicit message-type condition.
+2. Build a normalized business-context model.
 
-Examples may include:
+For every rule derive, where evidence exists:
 
-- message type = MX
-- pacs.*
-- camt.*
+market
+direction
+channel_or_instruction_source
+message_family
+message_type
+currency
+sender_geography
+receiver_geography
+participant/institution conditions
+business/product conditions
+flow_family
+error_family
+downstream_systems
+transaction_states
+terminal_outcome
 
-Use the actual normalized message-type field from the rule data.
+Use UNKNOWN where evidence is insufficient.
 
-Do not infer MX from arbitrary text.
+Do not infer fields from rule names unless explicitly marked as weak metadata.
 
-Add:
+3. Keep these concepts separate.
 
-message_family = MX | NON_MX | UNKNOWN
+MARKET:
+business/geographic classification derived primarily from approved conditions.
 
-## 2. MX market evidence precedence
+DIRECTION:
+inbound / outbound / return / internal / unknown.
 
-For MX rules, use this market-evidence preference:
+CHANNEL / SOURCE:
+where the instruction entered from, for example GPI, XSSL, TEC, or prs-* flows.
 
-1. explicit cond-country = XXX, if it is clearly an approved BRT market condition
-2. approved country derived from receiveraddress
-3. cond-receivercountry = XXX
-4. cond-sendercountry = XXX
-5. approved senderaddress/BIC-derived country
-6. other approved BRT mappings
+MESSAGE FAMILY:
+MX / MT / custom / unknown.
 
-Important MX behavior:
+DOWNSTREAM SYSTEM:
+routing hub, processor, service, endpoint.
 
-When sender-side and receiver-side geographic evidence differ, receiver-side evidence normally represents the relevant market for MX processing.
+Do not treat channel, destination, routing hub, processor, or rule ID as market.
 
-Example:
+4. Apply the validated MX rule.
 
-message type = pacs.008
-sendercountry = HK
-receiveraddress = ABCDSG...
+For MX / ISO 20022 traffic:
+- receiver-side geography normally determines market after an explicit approved
+  cond-country rule;
+- sender/receiver geography differences are not automatically conflicts;
+- retain both sender and receiver geography.
 
-If receiveraddress is a valid approved structured address/BIC and its country component resolves to SG:
+5. Discover business families.
 
-market_group = SG
-confidence = HIGH
-market_classification_source = mx_receiver_address_country
+Cluster rules using business-level dimensions rather than exact implementation.
 
-Preserve both sender-side and receiver-side geography in the rule record.
+Suggested family key:
 
-Do not discard sendercountry information.
+market
++ direction
++ channel/source
++ message family
++ major condition family
++ normalized flow signature
 
-## 3. Receiveraddress parsing
-
-Do not search arbitrary text for a country code.
-
-Only derive country from receiveraddress when:
-
-- the receiveraddress format is known and approved
-- the country-code position is structurally defined
-- the extracted code is a valid country/market code
-- the raw value, extracted code, node ID, rank, and condition are retained as evidence
-
-If receiveraddress format is unclear, do not guess.
-
-Keep the rule unresolved or use the next approved evidence source.
-
-## 4. Sender/receiver differences are not automatically conflicts for MX
-
-For MX messages, a difference such as:
-
-sendercountry = HK
-receiveraddress country = SG
-
-may be expected.
-
-Record it as:
-
-market_group = SG
-
-market_classification_source:
-- type = mx_receiver_address_country
-- evidence = receiveraddress condition
-
-related_geography:
-- sender_country = HK
-- receiver_country = SG
-
-Do not automatically mark NEEDS_REVIEW just because sender and receiver geography differ.
-
-## 5. When MX should be marked NEEDS_REVIEW
-
-Mark NEEDS_REVIEW only when:
-
-- receiver-side evidence conflicts with other receiver-side evidence
-- multiple receiver conditions disagree
-- receiveraddress country extraction is unreliable
-- an explicit approved BRT market condition contradicts the receiver-derived market
-- another approved BRT rule establishes different precedence
-
-## 6. Non-MX rules
-
-Do not automatically apply the MX receiver preference to non-MX messages.
-
-For NON_MX rules, continue using the normal condition-driven market classifier.
-
-## 7. Existing global rules remain unchanged
-
-Continue to enforce:
-
-- destination / routing_hub is not market evidence by itself
-- prs-* means channel/upstream ingress, not market
-- rule ID is not market evidence
-- extraction scope is not market evidence
-- processor is not market evidence
-- endpoint is not market evidence
-- environment is not market evidence
-
-## 8. Re-run current SG classification
-
-Apply this clarification to the existing SG local snapshot only.
-
-Do not query Oracle again.
-
-Re-run market classification and report:
-
-MX rules:
-NON_MX rules:
-UNKNOWN message-family rules:
-
-MX market evidence sources:
-- explicit_country:
-- mx_receiver_address_country:
-- receiver_country:
-- sender_country:
-- other approved mapping:
-
-MX sender/receiver geography differences:
-MX unresolved receiveraddress formats:
-MX conflicting receiver-side evidence:
-
-NON_MX market evidence sources:
-
-Rules with no approved market evidence:
-Remaining ambiguity patterns:
-
-Also show 5-10 representative MX examples with:
-
+Do not include:
 - rule ID
-- message type
-- sender country/address
-- receiver country/address
-- selected market
-- classification source
-- confidence
+- exact endpoint
+- exact global variable name
+- implementation-only node differences
 
-Do not start SG validation automatically.
-Do not start HK.
-Do not start Phase 2 optimization.
+unless they materially change business behavior.
+
+6. For each discovered business family produce:
+
+Business family name:
+Markets:
+Directions:
+Channels:
+Message families:
+Typical entry conditions:
+Typical main flow:
+Typical error/retry flow:
+Typical transaction-state progression:
+Typical terminal outcome:
+Downstream system categories:
+Number of rules:
+Representative rules:
+Known variants:
+Known exceptions:
+Confidence:
+Open business questions:
+
+Do not call differences redundant yet.
+
+7. Build business-condition matrices.
+
+Create a matrix showing which condition dimensions define each business family.
+
+For example:
+
+Family | Market | Direction | Channel | Message | Currency | Sender | Receiver | Flow
+
+The goal is to see which conditions actually distinguish business behavior.
+
+8. Build cross-market comparison.
+
+Compare MY, IN, and SG at the business-family level.
+
+Identify:
+
+- business families shared across all markets;
+- families shared by two markets;
+- market-specific families;
+- same business flow with different market conditions;
+- same conditions with different downstream routing;
+- same flow with different error behavior.
+
+Do NOT classify these as optimization candidates yet.
+
+9. Build a business flow model.
+
+Create a high-level model such as:
+
+Channel / Source
+    ↓
+Entry Conditions
+    ↓
+Validation
+    ↓
+Business Processing
+    ↓
+Routing / Processor
+    ↓
+Reporting
+    ↓
+Completion
+
+with optional branches:
+
+Error
+Retry
+Replay
+Callback
+
+Derive the actual stages from evidence rather than forcing every rule into this
+example.
+
+10. Required outputs
+
+Create:
+
+docs/business-model.md
+analysis/business-families.md
+analysis/business-condition-matrix.md
+analysis/business-flow-model.md
+analysis/cross-market-business-model.md
+analysis/business-model-gaps.md
+
+Also create a machine-readable form:
+
+analysis/business-families.json
+
+11. Business-model gaps
+
+Only create a gap when business meaning cannot be established safely.
+
+Cluster gaps by shared question.
+
+Examples:
+
+- meaning of a channel condition
+- direction cannot be determined
+- transaction-state meaning unknown
+- two flows look structurally identical but business purpose is unclear
+
+Do not ask one question per rule.
+
+12. Final report
+
+Report:
+
+Rules modeled:
+Business families:
+Cross-market families:
+Market-specific families:
+Direction families:
+Channel/source families:
+Message families:
+Flow families:
+
+Rules with complete business context:
+Rules with partial business context:
+
+Unique business-model gaps:
+Rules affected by gaps:
+
+Largest business families:
+Most common flow families:
+Most common condition dimensions:
+
+Then recommend whether the project is ready for:
+BUSINESS_MODEL_REVIEW
+or
+MORE_DOMAIN_INPUT_REQUIRED
+
+Do not start optimization automatically.
