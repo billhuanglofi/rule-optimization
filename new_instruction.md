@@ -1,250 +1,155 @@
-# Start Estate Validation Wave 2
-
-Wave 1 has been resolved sufficiently to continue.
-
-Current confirmed state:
-
-- 3,343 Wave-1 rules reviewed
-- 3,330 rules resolved through approved GLOBAL canonical country conditions
-- 0 remaining canonical country-condition conflicts
-- 13 rules remain without canonical country evidence
-- those 13 rules represent one shared BRT/domain-mapping question
-- 6 structural marker anomalies are confirmed SOURCE_DEFECT
-- the generic parser remains unchanged
-
-Do not reopen already resolved Wave-1 questions.
-
-Use the existing estate snapshot only.
-Do not query Oracle unless a genuinely missing source fact cannot be obtained
-from the local snapshot.
-
-Do not modify production rules.
-
----
-
-## 1. Carry the 13 unresolved Wave-1 rules as one domain gap
-
-Do not block Wave 2 because of these 13 rules.
-
-Keep them grouped under one unresolved domain-mapping pattern.
-
-For these rules:
-
-- do not infer market from rule ID or population name;
-- do not invent a CN/HASE/SANC mapping;
-- preserve all current condition evidence;
-- keep market unresolved until SME/BRT evidence exists.
-
-Do not ask one question per rule.
-
-If later populations expose the same condition pattern and provide stronger
-semantic evidence, update the shared gap rather than creating another question.
-
----
-
-## 2. Execute Wave 2 on the recommended medium-novelty populations
-
-Process:
-
-- CBPR_TW_*
-- CBPR_NZ_*
-- CBPR_MU_*
-
-Do NOT process CBPR_HK_* yet.
-
-The objective is maximum semantic coverage with minimal new domain work.
-
-Expected approximate scope:
-
-CBPR_TW_*:
-- 219 rules
-- ~5 new node IDs
-
-CBPR_NZ_*:
-- 189 rules
-- ~1 new node ID
-
-CBPR_MU_*:
-- 170 rules
-- 0 new node IDs
-
----
-
-## 3. Reuse approved GLOBAL knowledge
-
-Apply approved global semantics including:
-
-- cond-country = XXX -> market XXX
-- cond-sendercountry = XXX -> market XXX
-- cond-receivercountry = XXX -> market XXX
-- MX receiver-side precedence
-- structured BIC/address country extraction where approved
-- prs-* = channel/upstream ingress, not market
-- destination/routing_hub = downstream technical information, not market
-- generic condition/action parsing
-- generic transaction-state parsing
-- generic error/retry marker validation
-- MESSAGE_AGNOSTIC catch-all semantics where evidence matches
-
-Do not copy market/BRT-specific fallback mappings from MY, IN, or SG into
-TW/NZ/MU unless explicitly scoped GLOBAL.
-
----
-
-## 4. Focus first on semantic reuse
-
-For every node used by TW/NZ/MU:
-
-classify it as:
-
-KNOWN_GLOBAL
-KNOWN_BRT_SPECIFIC
-KNOWN_MARKET_SPECIFIC
-NEW_SEMANTIC
-UNKNOWN
-
-For the small number of new nodes:
-
-interpret each unique node once using:
-
-- canonical NODES metadata
-- representative VERB values
-- surrounding ordered flow context
-- usage across the selected populations
-
-Do not analyze the same node repeatedly per rule.
-
----
-
-## 5. Market classification
-
-Use canonical country-condition evidence first.
-
-Report separately:
-
-explicit_country
-sender_country
-receiver_country
-structured_address_country
-multiple_agreeing_conditions
-conflicting_conditions
-no_approved_market_evidence
-
-Do not create market-specific SME questions unless canonical evidence is
-actually insufficient.
-
-Cluster unresolved rules by shared condition pattern.
-
----
-
-## 6. Detect new condition semantics
-
-Identify any condition dimensions not previously understood.
-
-For each new dimension report:
-
-Node ID:
-Rules affected:
-Representative values:
-Likely business meaning:
-Evidence:
-Scope:
-Confidence:
-
-Scope must be one of:
-
-GLOBAL
-BRT_SPECIFIC
-MARKET_SPECIFIC
-POPULATION_SPECIFIC
-UNKNOWN
-
-Do not promote to GLOBAL without evidence.
-
----
-
-## 7. Structural validation
-
-Apply the established marker rules.
-
-Unmatched, mismatched, or unclosed known error/retry markers are SOURCE_DEFECT.
-
-Do not change the parser to accept malformed rules.
-
-If a genuinely new control construct appears, classify it separately as:
-
-NEW_VALID_PATTERN_CANDIDATE
-
-and show the exact ordered structure.
-
----
-
-## 8. Measure semantic coverage gained
-
-Report before/after estate coverage.
-
-Before Wave 2:
-
-Known node IDs: 152 / 418
-Known condition dimensions: 103
-Rules covered by Wave-1 selected-population semantics: 3,343
-Rules still primarily novel: 8,848
-
-After Wave 2 report:
-
-Known node IDs:
-Known condition dimensions:
-Known flow signatures:
-Known error patterns:
-
-Rules covered by trusted semantics:
-Rules still primarily novel:
-
-New reusable semantics learned:
-New BRT-specific semantics:
-New market-specific semantics:
-Still unknown:
-
----
-
-## 9. SME questions
-
-Generate a new SME decision sheet.
-
-Only include questions that genuinely require business knowledge.
-
-Do not include:
-
-- already-approved canonical country conditions;
-- known malformed marker patterns;
-- questions answerable from local metadata/context.
-
-Keep the 13 Wave-1 rules as one carried question unless new evidence resolves
-them.
-
-Target fewer than 5 total SME questions after Wave 2.
-
----
-
-## 10. Decide whether HK should be next
-
-After TW/NZ/MU are processed, reassess CBPR_HK_*.
-
-Report:
-
-CBPR_HK_* rules:
-unknown node IDs remaining:
-unknown condition dimensions remaining:
-new flow families remaining:
-expected SME questions:
-estimated coverage gain:
-
-Then recommend one of:
-
-READY_FOR_HK_VALIDATION
-ANOTHER_MEDIUM_WAVE_FIRST
-HIGH_NOVELTY_DOMAIN_WORK_REQUIRED
-PARSER_EXTENSION_REQUIRED
-
-Do not automatically start HK.
-Do not restart optimization design.
+You are investigating content-validation exceptions in the folder I provide.
+Your objective is to analyze all Excel validation reports and all exception categories, but you must work interactively with me and must not invent troubleshooting rules.
+1. Initial folder scan
+First inspect the entire folder and identify:
+all *_results_content_validation_report.xlsx files;
+any .sql files;
+the worksheets and relevant columns in each Excel report.
+Do not modify the original Excel files.
+For every Excel report, focus only on rows where:
+Status = Different
+The important columns include:
+Status;
+Column C TXID;
+Output Details;
+Scenario;
+any other columns necessary to understand the comparison.
+2. Categorize the exceptions
+Analyze Output Details for every row where Status = Different.
+Group the rows into meaningful exception categories based on the nature of the difference, not merely the complete literal Output Details string.
+For example, different TXIDs, UUIDs, IDs, payload values, or other row-specific identifiers should not automatically create separate categories if the underlying exception pattern is the same.
+However, do not over-normalize. If two messages appear similar but could represent different technical causes, keep them separate until investigation proves they are the same.
+For every category, maintain:
+category ID;
+category description;
+source Excel file(s);
+number of affected rows;
+Column C TXIDs;
+Scenario values;
+representative Output Details;
+investigation status;
+troubleshooting steps already performed;
+findings/evidence;
+whether all cases have been verified to have the same root cause.
+3. SQL / database requirement
+The database to investigate is:
+cbcc-eu-prodlike
+Column C of the Excel report contains the TXID that must be used for database investigation.
+Before attempting the first database investigation, check whether an appropriate .sql file exists in the same folder.
+If the SQL file does not exist, STOP and ask me to provide the SQL file in the same folder.
+Do not invent the SQL.
+Once I provide the SQL file:
+read and understand it;
+explain briefly how the TXID needs to be supplied;
+use the SQL as the basis for database investigation.
+Database access must be read-only. Never execute INSERT, UPDATE, DELETE, MERGE, DROP, ALTER, TRUNCATE, or other commands that change data or database objects.
+4. Investigate ONE category at a time
+Do not investigate every category simultaneously.
+Select one unresolved exception category and show me:
+category ID;
+category description;
+affected file(s);
+number of cases;
+TXID list;
+example Output Details.
+Then query cbcc-eu-prodlike for the category's Column C TXIDs using the supplied SQL.
+Summarize the database results and observable similarities/differences.
+5. Ask me how to troubleshoot
+After retrieving the initial database evidence for that category, STOP and ask me what troubleshooting step should be performed next.
+Do not assume the root cause yourself unless I have already taught you an applicable troubleshooting rule earlier in this investigation.
+I may give instructions such as:
+check a particular table or field;
+compare two processing states;
+inspect payload content;
+check message history;
+check timestamps;
+identify whether a field was transformed;
+run another SQL;
+compare with another system/state;
+use another diagnostic procedure.
+Record my troubleshooting instruction as part of the investigation procedure for that category.
+6. Apply each troubleshooting step to EVERY case
+This is critical.
+When I give you a troubleshooting step for a category, do not test only the sample TXID.
+Apply the same check to every TXID belonging to that category.
+Then compare the results.
+Determine whether all cases exhibit the same technical pattern.
+Report something like:
+Category CAT-003
+Cases checked: 27/27
+Same pattern: 25
+Different pattern: 2
+Never claim that a category has one root cause based only on one or a few samples.
+7. Consistency decision
+If all cases have the same behavior, tell me:
+what evidence is consistent;
+how many cases were verified;
+your current interpretation;
+whether there are any remaining uncertainties.
+Then ask me whether this is sufficient to mark the category as confirmed/resolved or whether another troubleshooting step is required.
+If any case behaves differently, do NOT force it into the same conclusion.
+Show me:
+which TXIDs follow the expected pattern;
+which TXIDs do not;
+the evidence that differs.
+Then STOP and ask me for further instructions.
+If appropriate, propose splitting the category into subcategories, but do not finalize the split until the evidence supports it.
+8. Learn troubleshooting rules carefully
+When a category is confirmed by me, record the confirmed diagnostic pattern and troubleshooting procedure.
+If a later category appears to match an already-confirmed pattern, you may tell me:
+This category appears to match the previously confirmed rule CAT-xxx because ...
+You may then apply the already-confirmed checks to all cases.
+But still validate all TXIDs before concluding that the new category has the same cause.
+Never generalize from similarity alone.
+9. Investigation loop
+Continue using this loop:
+Find unresolved category
+→ collect all Column C TXIDs
+→ query cbcc-eu-prodlike
+→ summarize evidence
+→ ask me for troubleshooting step
+→ apply the step to ALL cases
+→ compare results
+→ if inconsistent, ask me
+→ if consistent, ask me to confirm resolution
+→ record conclusion
+→ move to next unresolved category
+Continue until every Status = Different row from every Excel report has been assigned to an investigated category.
+10. Maintain investigation progress
+Maintain a persistent investigation record so progress is not lost.
+Recommended structure:
+analysis_progress.json
+and
+content_validation_analysis.md
+Store at least:
+files scanned;
+total Different rows;
+categories discovered;
+category → TXID mapping;
+categories not started;
+categories under investigation;
+categories confirmed;
+categories requiring further instruction;
+troubleshooting steps supplied by me;
+DB evidence;
+exceptions that do not fit their original category.
+Update the progress files after every investigation step.
+11. Final completeness check
+Before declaring the investigation complete, verify mathematically:
+Total rows with Status=Different
+=
+Total rows assigned to all final categories
+and every assigned row must have an investigation status.
+No TXID or Different row may silently disappear from the analysis.
+Finally produce a consolidated report containing, for each Excel file and category:
+exception category;
+number of cases;
+TXIDs;
+Scenario;
+representative Output Details;
+troubleshooting procedure;
+DB findings;
+confirmed root cause/explanation;
+exceptional cases;
+final status.
+Important operating rule: whenever evidence is insufficient, cases within a category disagree, SQL is missing, or you need domain knowledge from me, STOP AND ASK ME. Do not invent the missing explanation.
