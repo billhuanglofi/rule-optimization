@@ -1,387 +1,403 @@
+Milestone 1 is successful.
+
+We have demonstrated one concrete differential case:
+
+    CBPR_GB_IB_151632_02
+    CBPR_GB_IB_151632_01
+
+Using one common effective matcher input:
+
+    Legacy 3.33.2.13:
+        both compete
+        winner = CBPR_GB_IB_151632_02
+
+    V26 3.319.7:
+        both compete
+        winner = CBPR_GB_IB_151632_01
+
+The result is currently classified as:
+
+    CONFIRMED_LATENT_SELECTION_CHANGE
+
+because the common matcher input was constructed realistically but was not
+captured directly from one historical payment.
+
+DO NOT spend the next milestone manually validating more individual DB pairs.
+
+The objective now is to GENERALIZE the differential method so that we can
+discover impacted rules across an entire environment and later reuse the same
+method for EU PRODLIKE, AP PRODLIKE, AM PRODLIKE, etc.
+
+Do not modify production code or DB data.
+
+
 ============================================================
-ULTIMATE MISSION / ACCEPTANCE CRITERIA
+MILESTONE 2 OBJECTIVE
 ============================================================
 
-The final objective of this investigation is NOT simply to find duplicate,
-similar, or overlapping rules in the database.
+Build/design a reusable differential impact analyser whose primary unit of
+analysis is an EFFECTIVE MATCHER INPUT.
 
-The objective is to develop a reusable method that identifies rules/groups
-whose ROUTING SELECTION MAY CHANGE between non-V26 and V26.
+Conceptually:
 
-The target behavior is:
+    analyse(effectiveMatcherInput, environmentRules)
 
-    SAME effective payment/message/request
+must produce:
 
-    non-V26:
-        matching candidates = [...]
-        selected rule       = A
+    legacyMatchingRules
+    legacyTopCandidates
+    legacyWinner
 
-    V26:
-        matching candidates = [...]
-        selected rule       = B
+    v26MatchingRules
+    v26TopCandidates
+    v26Winner
 
-    where A != B
+    selectionChanged = legacyWinner != v26Winner
+
+The same matcher input must be supplied to both implementations.
+
+
+============================================================
+1. GENERALIZE THE EXISTING ONE-PAIR HARNESS
+============================================================
+
+First inspect what was created for Milestone 1.
+
+Separate any hard-coded assumptions for:
+
+    CBPR_GB_IB_151632_01
+    CBPR_GB_IB_151632_02
+
+from the actual reusable logic.
+
+Design the evaluator so that it accepts:
+
+    effective matcher input
+    rule snapshot / rule collection
+
+and executes the REAL legacy and V26 selection implementations.
+
+Do not hard-code the expected candidate pair.
+
+The evaluator must discover whatever rules match.
+
+
+============================================================
+2. RETAIN COMPLETE COMPETITION INFORMATION
+============================================================
+
+Do NOT assume exactly two rules compete.
+
+For each input retain:
+
+    allLegacyMatchingRules
+    legacyTopCandidates
+    legacyWinner
+
+    allV26MatchingRules
+    v26TopCandidates
+    v26Winner
+
+There may be 3, 4 or more matching rules.
+
+For reporting purposes derive:
+
+    winnerTransition =
+        legacyWinner + " -> " + v26Winner
+
+But retain the complete candidate group internally.
+
+
+============================================================
+3. DEFINE WHAT COUNTS AS AN IMPACT
+============================================================
+
+Primary behavior-change condition:
+
+    legacyWinner != v26Winner
+
+Classify results as:
+
+OBSERVED_SELECTION_CHANGE
+    Effective input was captured from a real historical/test execution and the
+    selected rules are supported by authoritative logs.
+
+REPLAY_CONFIRMED_SELECTION_CHANGE
+    A captured effective input was replayed through both exact implementations
+    and the winners differ.
+
+CONFIRMED_LATENT_SELECTION_CHANGE
+    A valid/realistic synthetic effective matcher input makes both versions
+    select different winners, but historical execution has not yet been proven.
+
+POSSIBLE_SELECTION_CHANGE
+    Static evidence suggests a competition/change but no common effective input
+    has been demonstrated.
+
+NO_SELECTION_CHANGE
+    Both versions produce the same winner.
+
+UNKNOWN
+    Evidence is insufficient.
+
+
+============================================================
+4. FIRST INPUT SOURCE: HISTORICAL / TEST EFFECTIVE INPUTS
+============================================================
+
+Investigate how we can obtain actual effective matcher inputs from existing
+executions.
+
+Possible sources:
+
+    Splunk
+    initiator logs
+    content-validation test runs
+    regression test artefacts
+    stored request/header dumps
+    existing CSV/workbooks
+    local captured logs
+
+The important data is NOT merely the raw payment.
+
+Ideally recover the final values presented to RuleMatcher after:
+
+    body parsing
+    field extraction
+    header creation
+    normalization
+    derived fields
+
+For every source, determine:
+
+    Can we reconstruct the complete matcher input?
+    Which fields are available?
+    Is provenance/version known?
+    Which request/test ID identifies the source?
+
+
+============================================================
+5. INVESTIGATE THE KNOWN _01/_02 HISTORICAL CASE
+============================================================
+
+Before scanning many inputs, finish the evidence chain for the known pair.
+
+We have identifiers for:
+
+    non-V26 execution
+    V26 execution
+    alternative V26 rerun
+
+Retrieve, if accessible:
+
+    deployed service version
+    effective matcher input
+    matching candidate rules
+    selected rule
+
+Compare the matcher inputs field by field.
+
+Report:
+
+    field
+    non-V26 value
+    V26 value
+    same/different
+
+If the effective matcher input is identical:
+
+    replay that captured input through both exact implementations.
+
+If it reproduces:
+
+    legacy -> _02
+    V26    -> _01
+
+upgrade the evidence accordingly.
+
+If the inputs differ, do NOT call that request pair a clean version-induced
+selection change. Explain which input differences affected matching.
+
+
+============================================================
+6. BUILD A CORPUS-LEVEL ANALYSER
+============================================================
+
+Once one captured input can be processed, generalize to N inputs:
+
+    for each effectiveMatcherInput:
+        evaluate legacy
+        evaluate V26
+        compare winners
+
+Produce one detailed row per input:
+
+    environment
+    input_id
+    source
+    message/business ID if available
+    legacy_matching_rules
+    legacy_top_candidates
+    legacy_winner
+    v26_matching_rules
+    v26_top_candidates
+    v26_winner
+    selection_changed
+    evidence_classification
+
+
+============================================================
+7. AGGREGATE INTO IMPACTED RULE TRANSITIONS
+============================================================
+
+Then aggregate changed inputs by:
+
+    legacyWinner -> v26Winner
+
+Desired output similar to the existing workbook:
+
+    Legacy_Winner
+    V26_Winner
+    Candidate_Rules
+    Count
+
+but add:
+
+    Environment
+    First_Seen
+    Last_Seen
+    Evidence_Type
+    Sample_Input_ID
+    Service_Versions
+    Confidence
 
 Example:
 
-    non-V26 winner:
-        CBPR_GB_IB_151632_02
-
-    V26 winner:
-        CBPR_GB_IB_151632_01
-
-    competing candidates:
-        CBPR_GB_IB_151632_02
-        CBPR_GB_IB_151632_01
-
-This is the primary kind of impact we need to discover.
-
-
-IMPORTANT PRINCIPLES
-====================
-
-1. DATABASE ANALYSIS IS ONLY ONE INPUT
-
-RULE_ID + CONDITIONS is useful for discovering potential competition, but DB
-analysis alone is not sufficient proof.
-
-Routing may depend on:
-
-- payment/message body
-- extracted values
-- generated headers
-- normalized fields
-- derived fields
-- request/routing context
-- condition evaluation semantics
-
-The real question is:
-
-    "Can the same effective matcher input cause these rules to compete,
-     and do legacy and V26 select different winners?"
-
-
-2. THE SAME INPUT MUST BE COMPARED
-
-Whenever possible, legacy and V26 must be evaluated using the SAME effective
-matcher input.
-
-Do not compare unrelated legacy and V26 requests merely because their rule IDs
-look related.
-
-If historical runs cannot be directly correlated, state this explicitly.
-
-
-3. DO NOT ASSUME COMPETITION IS ALWAYS BETWEEN TWO RULES
-
-A request may match:
-
-    Rule A
-    Rule B
-    Rule C
-    ...
-
-Retain the complete candidate set.
-
-For reporting, derive:
-
-    legacy winner -> V26 winner
-
-but do not throw away the other matching candidates.
-
-
-4. DISTINGUISH DISCOVERY FROM PROOF
-
-Use these confidence categories:
-
-OBSERVED_SELECTION_CHANGE
-
-    A real historical/test request shows:
-        legacy winner != V26 winner
-
-REPLAY_CONFIRMED_SELECTION_CHANGE
-
-    The same effective input was evaluated using both implementations and
-    produced different winners.
-
-CONFIRMED_LATENT_SELECTION_CHANGE
-
-    No historical occurrence was found, but a valid synthetic matcher input
-    was constructed and actual evaluators choose different winners.
-
-POSSIBLE_SELECTION_CHANGE
-
-    Static analysis indicates that rules may compete and selection may differ,
-    but no concrete common input has yet been proven.
-
-COMPETING_SAME_RESULT
-
-    Rules can compete but legacy and V26 select the same winner.
-
-NO_OVERLAP
-
-    Rules cannot match the same effective input.
-
-UNKNOWN
-
-    The current analyser cannot safely decide because of expressions,
-    unsupported operators, missing runtime context, etc.
-
-
-5. DO NOT CLAIM "ALL IMPACTED RULES" WITHOUT COVERAGE EVIDENCE
-
-The eventual method should report its coverage.
-
-If some condition operators, expressions, derived fields, or request paths
-cannot be modelled, explicitly list them.
-
-The correct result may therefore be:
-
-    confirmed impacts
-    +
-    confirmed latent impacts
-    +
-    unresolved possible impacts
-
-rather than falsely claiming mathematical completeness.
-
-
-6. USE EXISTING KNOWN MISMATCHES AS A VALIDATION CORPUS
-
-We already have an existing mismatch result containing columns conceptually
-similar to:
-
-    Winner_v3.33.2.13
-    Winner_v3.319.7
-    Candidate_Rules
-    Result
-    Count
-
-Examples include high-frequency mismatches such as:
-
     CBPR_GB_IB_151632_02
         ->
     CBPR_GB_IB_151632_01
 
-Treat these as known expected results / validation seeds.
-
-First establish exactly how this dataset was generated and its provenance.
-
-Then ensure the new investigation method can reproduce known cases.
-
-If it cannot reproduce an obvious known mismatch, investigate why before
-scaling the approach.
-
-
-7. DESIGN FOR MULTIPLE ENVIRONMENTS FROM THE START
-
-The matching and comparison logic must be environment-independent.
-
-The eventual workflow should be reusable against environments such as:
-
-    EU PRODLIKE
-    AP PRODLIKE
-    AM PRODLIKE
-
-Environment-specific inputs may include:
-
-    DB connection / rule snapshot
-    Splunk index/source
-    application configuration
-    historical request corpus
-    legacy version
-    target V26 version
-
-Do not hard-code:
-
-    EU-specific rule IDs
-    country values
-    table data
-    Splunk indexes
-    current candidate lists
-
-
-8. PREFER PRODUCTION IMPLEMENTATION OVER REIMPLEMENTATION
-
-Where practical, reuse actual application classes for:
-
-    CONDITIONS parsing
-    message/header extraction
-    normalization
-    condition evaluation
-    RuleMatcher
-    legacy rule selection
-    V26 rule selection
-
-Avoid implementing an independent approximation unless necessary.
-
-If approximation is unavoidable, document exactly where it differs from
-production behavior.
-
-
-9. KEEP STATIC AND DYNAMIC ANALYSIS COMPLEMENTARY
-
-Eventually the method should contain two complementary discovery paths.
-
-PATH A — observed/runtime impact
-
-    historical/test requests
-        ->
-    effective matcher input
-        ->
-    legacy evaluation
-        +
-    V26 evaluation
-        ->
-    different selected rule
-
-PATH B — latent/static impact
-
-    DB rule definitions
-        ->
-    possible competing rules/groups
-        ->
-    construct common matcher-input witness
-        ->
-    legacy evaluation
-        +
-    V26 evaluation
-        ->
-    different selected rule
-
-PATH A finds exercised impact.
-PATH B attempts to find impact not exercised by available traffic.
-
-
-10. FINAL DESIRED REPORT
-
-The long-term output should support fields such as:
-
-    environment
-
-    request_or_witness_id
-    source
-
-    legacy_matching_rules
-    v26_matching_rules
-
-    legacy_selected_rule
-    v26_selected_rule
-
-    competition_group
-
-    effective_input_summary
-
-    behavior_change_type
-    overlap_status
-
-    occurrence_count
-    first_seen
-    last_seen
-
-    confidence
-    evidence
-    unresolved_reason
-
-For aggregation, also produce:
-
-    legacy_selected_rule
-    v26_selected_rule
-    candidate_set
-    occurrence_count
+    count = N
 
 
 ============================================================
-PROGRESSIVE DELIVERY
+8. USE THE EXISTING MISMATCH WORKBOOK AS A VALIDATION SET
 ============================================================
 
-Do not attempt the entire solution in one implementation.
+The existing workbook/CSV contains likely transitions such as:
 
-Proceed in milestones.
+    CBPR_GB_IB_151632_02 -> CBPR_GB_IB_151632_01
 
-MILESTONE 1
+and other winner mismatches.
 
-Take ONE known mismatch, preferably:
+Do NOT treat that workbook as authoritative if provenance is incomplete.
 
-    CBPR_GB_IB_151632_02
-        ->
-    CBPR_GB_IB_151632_01
+Instead use it as a validation target:
 
-and prove end-to-end:
+    "Can the new analyser independently rediscover these transitions?"
 
-    DB CONDITIONS
-        ->
-    effective matcher input
-        ->
-    both/competing rules match
-        ->
-    legacy selection
-        ->
-    V26 selection
-        ->
-    different winner
+For every existing workbook transition classify:
 
-Explain any missing runtime inputs if this cannot yet be reproduced.
+REDISCOVERED
+    independently found by new differential analysis
 
+SUPPORTED_ONLY
+    workbook claims it but new evidence is incomplete
 
-MILESTONE 2
+NOT_REPRODUCED
+    new analysis does not reproduce it
 
-Generalize the above comparison so that one effective matcher input can be
-evaluated automatically against both implementations.
-
-
-MILESTONE 3
-
-Run the differential evaluator over an available historical/regression request
-corpus and reproduce the existing mismatch report.
-
-
-MILESTONE 4
-
-Aggregate differences into impacted rule pairs/groups.
-
-
-MILESTONE 5
-
-Use DB CONDITIONS to discover possible competing rules that historical traffic
-did not exercise.
-
-
-MILESTONE 6
-
-Generate or derive valid matcher-input witnesses for those static candidates
-and evaluate them using both selectors.
-
-
-MILESTONE 7
-
-Parameterize the process so the exact same methodology can run against:
-
-    EU PRODLIKE
-    AP PRODLIKE
-    AM PRODLIKE
+CONTRADICTED
+    available evidence shows the workbook transition is not valid
 
 
 ============================================================
-DO NOT DO YET
+9. ENVIRONMENT-INDEPENDENT DESIGN
 ============================================================
 
-Do not:
+Do not hard-code EU PRODLIKE.
 
-- modify production routing behavior
-- update DB rule data
-- recommend rule fixes
-- assume rule ID naming conventions imply competition
-- run an unrestricted Cartesian comparison without first finding safe ways to
-  reduce candidate scope
-- declare a pair impacted solely because its CONDITIONS look similar
-- declare completeness while unsupported matching semantics remain
+Separate:
+
+A. Rule source
+B. Effective-input source
+C. Differential evaluation logic
+D. Reporting
+
+Conceptual interfaces:
+
+    RuleSource(environment)
+        -> rule snapshot
+
+    EffectiveInputSource(environment)
+        -> effective matcher inputs
+
+    DifferentialEvaluator
+        -> legacy result + V26 result
+
+    ImpactAggregator
+        -> winner transitions / candidate groups
+
+The same evaluator must later support:
+
+    EU_PRODLIKE
+    AP_PRODLIKE
+    AM_PRODLIKE
+
+Only data/configuration sources should change.
 
 
-At every milestone report:
+============================================================
+10. DO NOT USE DB STATIC PAIR DISCOVERY AS THE PRIMARY METHOD YET
+============================================================
 
-    What was proven?
-    What evidence proves it?
-    What remains an assumption?
-    What is currently impossible to determine?
-    What is the next smallest experiment that would reduce uncertainty?
+DB static analysis remains important, but it is the SECOND discovery layer.
+
+First build:
+
+    real/test effective inputs
+        ->
+    differential evaluation
+        ->
+    observed impacted transitions
+
+After this works, we will add:
+
+    DB conditions
+        ->
+    possible competition
+        ->
+    synthetic witness generation
+        ->
+    same differential evaluator
+        ->
+    latent impacted transitions
+
+
+============================================================
+DELIVERABLE FOR THIS MILESTONE
+============================================================
+
+Do not attempt to solve every environment yet.
+
+Return:
+
+1. How the existing Milestone 1 harness can be generalized.
+2. Exact reusable components/classes/scripts proposed.
+3. How one effective matcher input will be represented.
+4. How legacy/V26 evaluation will be invoked.
+5. How historical inputs can be collected.
+6. How results will be aggregated.
+7. How the existing mismatch workbook will be used for validation.
+8. What needs to be parameterized for EU/AP/AM PRODLIKE.
+9. Remaining blockers.
+
+If implementation is safe and isolated from production code, implement the
+smallest reusable version that can:
+
+    take multiple effective matcher inputs
+    run both evaluators
+    output every case where winner differs.
+
+Do not implement DB witness generation yet.
+Do not attempt a production fix.
