@@ -1,418 +1,342 @@
-I need you to investigate a potential rule-selection regression in this repository.
+Continue the investigation. Do NOT modify production code or database data.
 
-IMPORTANT:
-- Investigation only.
-- Do NOT modify any source files.
-- Do NOT create commits.
-- Do NOT refactor anything.
-- Do NOT propose a fix until the investigation is complete.
-- Base conclusions on actual source code and configuration found in this repository.
-- When reporting findings, include file paths, class/method names, and relevant line numbers where possible.
+The next objective is to identify RULE PAIRS whose selection behavior can change
+between the legacy implementation and V26.
 
-Background
-==========
+Important finding from the previous investigation:
+The regression surface is broader than only V26 rules with equal weight/rank,
+because legacy and V26 calculate precedence differently.
 
-We are investigating behavior differences between a legacy version and V26 of the initiator service.
+Therefore DO NOT limit the analysis to:
+    same V26 weight AND same V26 rank.
 
-The current hypothesis is:
-
-1. Multiple rules can match the same incoming message.
-2. Legacy behavior did not have a deterministic tie-breaker for certain equally ranked rules.
-3. V26 introduced deterministic sorting.
-4. V26 appears to sort using something equivalent to:
-
-    Comparator.comparingInt(Rule::getWeight).reversed()
-        .thenComparing(
-            Comparator.comparingInt(Rule::getRank).reversed()
-        )
-        .thenComparing(Rule::getId)
-
-5. Therefore, when two rules have:
-   - the same weight
-   - the same rank
-   - and both match the input
-
-   V26 selects the alphabetically/lower sorted rule ID.
-
-Examples observed during investigation include pairs similar to:
-
-    CBPR_GB_IB_151339_02
-    CBPR_GB_IB_151344_016
-
-and:
-
-    CBPR_CL_IB_382001
-    rule-382015
-
-Runtime logs also appear to contain messages similar to:
-
-    "There are more than one rules matching the headers"
-
-and:
-
-    "The selected Rule ID is: ..."
-
-The objective of this investigation is to understand how we can identify ALL potentially ambiguous rule pairs from:
-1. the database/static rule configuration
-2. runtime logs / Splunk
+We need to compare the relative ordering of every plausible competing rule pair
+under BOTH algorithms.
 
 
-Investigation tasks
-===================
+OBJECTIVE
+=========
 
-Please investigate the repository and answer the following.
+Build a method to answer, for a pair of rules A and B:
 
-A. Rule model
--------------
+1. Can A and B potentially match the same request?
+2. What precedence does LEGACY assign to A vs B?
+3. What precedence does V26 assign to A vs B?
+4. Does the relative ordering change?
+5. If legacy precedence is tied/undefined, does V26 make the result deterministic?
+6. Which rule would V26 select?
+7. Have we observed this pair competing at runtime?
 
-Find the Rule model/domain object.
 
-Determine:
+PHASE 1 — Precisely model both precedence algorithms
+=====================================================
 
-- Rule ID field
-- Rule weight
-- Rule rank
-- conditions associated with a rule
-- enabled/disabled status if applicable
-- effective/start/end dates if applicable
-- country / direction / message type / service / scope fields if applicable
+From the source already investigated, write down the exact precedence key for
+LEGACY and V26.
 
-Explain how Rule.getWeight() is calculated.
+Do not simplify them into generic descriptions.
 
-Specifically determine whether weight means:
-- number of conditions
-- number of distinct input fields
-- or something else.
+For example determine the exact legacy values involved in selection:
+- condition count?
+- evaluator count?
+- number of conditions after filtering?
+- number before filtering?
+- any operator precedence?
+- collection/iteration order?
 
-Explain exactly how Rule.getRank() is calculated.
+And determine the exact V26 values:
+- Rule.getWeight()
+- Rule.getRank()
+- Rule.getId()
+- any other comparator or filtering step
 
-Identify the ranking values for operators such as:
-- ==
-- =
-- IN
-- LIKE
+Pay special attention to the previous finding that V26 weight/rank may be
+calculated BEFORE some conditions are filtered from the cached rule.
+
+Document this explicitly.
+
+
+PHASE 2 — Build a "precedence fingerprint" for every rule
+=========================================================
+
+Using the actual database/schema identified previously, produce a dataset with
+one row per rule containing enough information to evaluate BOTH algorithms.
+
+Desired conceptual columns:
+
+rule_id
+
+legacy_condition_count
+legacy_evaluator_count
+legacy_precedence_value
+
+v26_weight
+v26_rank
+v26_rule_id_sort_key
+
+condition_fields
+condition_operators
+condition_values
+
+plus any relevant scope fields actually present in the implementation.
+
+Do not invent enabled/effective-date fields if the schema does not contain them.
+
+Also expose:
+- conditions discarded by V26 cache filtering
+- original calculated weight/rank
+- final conditions actually evaluated
+
+because the earlier investigation found these may differ.
+
+
+PHASE 3 — Find candidate competing pairs
+========================================
+
+We must avoid comparing every rule against every other rule if possible.
+
+Determine safe coarse filters that prove two rules CANNOT compete.
+
+Use only filters justified by actual source semantics.
+
+Examples may include:
+- incompatible message field requirements
+- incompatible exact equality conditions
+- incompatible routing/domain scope
+- incompatible country
+- incompatible message type
+
+But do not assume these fields exist or are hard scopes unless verified.
+
+Generate candidate pairs:
+
+rule_a
+rule_b
+
+where there is no obvious proof that they cannot both match.
+
+
+PHASE 4 — Compare legacy vs V26 precedence
+==========================================
+
+For each candidate pair, calculate:
+
+legacy_relation:
+    A_BEFORE_B
+    B_BEFORE_A
+    TIED_OR_UNDEFINED
+
+v26_relation:
+    A_BEFORE_B
+    B_BEFORE_A
+    TIED_BEFORE_ID
+    [whatever states match the actual implementation]
+
+Then calculate:
+
+behavior_change_type
+
+Use these categories:
+
+ORDER_REVERSED
+    Legacy prefers A but V26 prefers B,
+    or legacy prefers B but V26 prefers A.
+
+LEGACY_AMBIGUOUS_V26_DETERMINISTIC
+    Legacy cannot deterministically distinguish the two,
+    while V26 deterministically chooses one.
+
+PRECEDENCE_CHANGED_BUT_WINNER_SAME
+    Internal score/order changed but the same rule still wins.
+
+NO_PRECEDENCE_CHANGE
+    Both versions prefer the same rule for the same reason.
+
+UNKNOWN
+    Source semantics are insufficient to determine the comparison.
+
+
+PHASE 5 — Determine semantic overlap
+====================================
+
+Precedence change alone is not an impact.
+
+A pair is only potentially impactful if both rules can match the SAME input.
+
+For each behavior-change pair, determine whether overlap is:
+
+CONFIRMED_OVERLAP
+POSSIBLE_OVERLAP
+NO_OVERLAP
+UNKNOWN
+
+Use exact application matching semantics.
+
+Start with operators whose intersection is safely provable, such as exact
+equality / IN where possible.
+
+Do not claim general LIKE/regex overlap can be solved with simplistic SQL.
+
+For difficult predicates such as:
+- Java regex
+- LIKE if internally regex based
 - IN_LIKE
-- any other supported operators
+- expressions
 
-Do not infer these values. Find the implementation.
+mark them for application-level evaluation if necessary.
 
+Investigate whether the actual matcher/evaluator can be reused to validate
+overlap rather than reimplementing matching semantics.
 
-B. Rule ordering / selection
-----------------------------
 
-Find the exact code that sorts matching rules.
+PHASE 6 — Produce the impact candidate report
+=============================================
 
-Find all usages of:
-- Comparator
-- getWeight()
-- getRank()
-- getId()
-- sorted(...)
-- sort(...)
-- findFirst()
-- matchMost(...)
-- RuleMatcher
-- StoreCache
+The final output I want is conceptually:
 
-Determine the COMPLETE rule precedence order.
+rule_a
+rule_b
+legacy_precedence_a
+legacy_precedence_b
+legacy_relation
+v26_weight_a
+v26_rank_a
+v26_weight_b
+v26_rank_b
+v26_relation
+v26_expected_winner
+behavior_change_type
+overlap_status
+reason
+confidence
 
-For example, verify whether it is actually:
+Prioritize rows where:
 
-    weight DESC
-    rank DESC
-    rule ID ASC
+behavior_change_type IN (
+    ORDER_REVERSED,
+    LEGACY_AMBIGUOUS_V26_DETERMINISTIC
+)
 
-and then first matching rule.
+AND
 
-Show the exact implementation.
+overlap_status IN (
+    CONFIRMED_OVERLAP,
+    POSSIBLE_OVERLAP
+)
 
-Also determine whether sorting happens:
-- when rules are loaded into cache
-- before matching
-- after matching
-- or in multiple places.
 
-Identify the data structure containing rules before sorting.
+PHASE 7 — Runtime confirmation using Splunk
+===========================================
 
-Pay particular attention to:
-- HashMap
-- ConcurrentHashMap
-- HashSet
-- collections with undefined iteration order
+Separately, use the exact multiple-rule-match log format previously identified.
 
+Find actual runtime events where candidate pairs competed.
 
-C. Legacy behavior
-------------------
+For each observed event extract:
 
-Use git history if available.
+timestamp
+message/request identifier
+all_matching_rules
+selected_rule
+rank/weight if present
+service version
+relevant routing result if available
 
-Find when `.thenComparing(Rule::getId)` or equivalent rule-ID tie-breaking was introduced.
+Aggregate by canonical rule pair.
 
-Identify:
-- commit
-- PR reference if present
-- reason from comments/commit messages if available
+Desired output:
 
-Also inspect the previous implementation.
+rule_a
+rule_b
+runtime_occurrences
+first_seen
+last_seen
+selected_rules_seen
+sample_request_id
 
-Explain what happened in the legacy implementation when two rules had identical precedence.
 
-Determine whether the old selection could depend on:
-- map iteration order
-- set iteration order
-- insertion order
-- database return order
-- cache loading order
-- another factor
+PHASE 8 — Join static and runtime evidence
+==========================================
 
-Clearly distinguish confirmed findings from hypotheses.
+Classify each pair:
 
+CONFIRMED_BEHAVIOR_CHANGE
+    Static analysis says legacy/V26 precedence differs
+    AND Splunk shows the pair competing.
 
-D. Matching semantics
----------------------
+LATENT_BEHAVIOR_CHANGE
+    Static analysis says precedence can differ
+    AND overlap is possible/confirmed
+    BUT no runtime occurrence has yet been found.
 
-Find the actual rule matching implementation.
+OBSERVED_COLLISION_NO_PROVEN_VERSION_CHANGE
+    Splunk shows the rules competing
+    but static analysis does not yet prove a legacy/V26 ordering change.
 
-For every supported operator, document how matching works.
+SAFE_SAME_ORDER
+    Rules may overlap but both algorithms produce the same winner.
 
-Especially investigate:
+UNKNOWN
+    More evidence is required.
 
-    ==
-    IN
-    LIKE
-    IN_LIKE
 
-Determine:
-- wildcard syntax
-- case sensitivity
-- NULL behavior
-- empty-string behavior
-- trimming behavior
-- multiple values
-- escaping
-- regex conversion if applicable
+IMPORTANT EDGE CASES
+====================
 
-This is important because later we want to detect whether two rules can overlap.
+Explicitly investigate these findings from the previous report:
 
-Identify the exact class/method that answers:
+1. nextRules path
+   Determine whether selection through nextRules bypasses normal StoreCache
+   deterministic ordering. These pairs may need a separate category.
 
-    "Does this rule match this input message?"
+2. Condition filtering
+   Weight/rank may be calculated before conditions are removed.
+   Make sure pair comparison reproduces this exact behavior.
 
+3. Expressions
+   If expression rules exist, do not silently ignore them.
 
-E. Multiple-match detection
----------------------------
+4. Request-level feature toggles / extendedHeaders
+   Determine whether the matching rule set can differ depending on request
+   flags. Identify whether this needs to be part of the candidate model.
 
-Search for the log message:
+5. CL example inconsistency
+   The reported rule-382015 / CBPR_CL_IB_382001 result apparently does not fit
+   normal V26 ID-ascending behavior and rule-382015 is absent from the current
+   database.
+   Treat this as an unresolved case.
+   Do not force it to fit the general hypothesis.
+   Explain possible paths that could produce it.
 
-    "There are more than one rules matching the headers"
+6. Do not rely on the supplied CSV as authoritative evidence if its provenance
+   cannot be established.
 
-or similar wording.
 
-Find the code producing it.
+DELIVERABLES
+============
 
-Report:
-- class
-- method
-- log level
-- exact log format
-- fields included in the log
+Do not implement a fix.
 
-Determine whether that log contains:
-- all matching rule IDs
-- rank
-- weight
-- message ID
-- correlation ID
-- request ID
-- country
-- message type
-- destination
-- OwningGrp
-- Tag 70
-- application/service version
+Return:
 
-Also find the log:
-
-    "The selected Rule ID is"
-
-Document its exact format.
-
-
-F. Correlation fields for Splunk
---------------------------------
-
-Identify which identifiers can be used to correlate:
-
-1. the "multiple rules matched" log
-2. the "selected rule" log
-3. downstream routing/destination logs
-
-Look for fields such as:
-
-    messageId
-    msgId
-    correlationId
-    x-correlation-id
-    x-request-id
-    x-mesh-request-id
-    transactionId
-
-Determine which identifier remains stable across the entire processing flow.
-
-If possible, identify which identifier would also remain the same when comparing legacy and V26 test executions.
-
-
-G. Database / rule persistence
-------------------------------
-
-Find where rules come from.
-
-Determine whether they are loaded from:
-- relational database
-- configuration files
-- API
-- cache
-- another service
-
-Find:
-- repository/DAO classes
-- SQL queries
-- ORM entities
-- table names
-- column names
-- joins used to assemble rules and conditions
-
-Document the relevant schema as far as it can be determined from the source.
-
-I specifically need enough information to later write SQL that can find candidate rule collisions.
-
-For each rule, identify where we can obtain:
-
-    rule_id
-    enabled/status
-    weight or inputs needed to calculate weight
-    rank or operators needed to calculate rank
-    condition field name
-    condition operator
-    condition value
-    country/scope
-    effective dates
-
-If SQL files, migrations, Liquibase, Flyway, Hibernate/JPA mappings, etc. exist, inspect those too.
-
-
-H. Static collision detection feasibility
------------------------------------------
-
-Based on the actual implementation, assess how we could statically find risky rule pairs.
-
-A "high-risk pair" currently means:
-
-    both rules can match the same message
-    AND same weight
-    AND same rank
-
-so V26 must use rule ID as the tie-breaker.
-
-Do NOT implement this scanner yet.
-
-Instead determine:
-
-- what data would be required
-- which comparisons are easy in SQL
-- which comparisons require application matching semantics
-- whether the existing matcher can potentially be reused
-- which fields can be used to reduce the candidate set before doing expensive overlap analysis
-
-Consider grouping/filtering candidates by things such as:
-
-    country
-    direction
-    message type
-    field set
-    weight
-    rank
-    enabled state
-    effective date
-
-Explain which of these are actually valid based on the code.
-
-
-I. Splunk investigation feasibility
------------------------------------
-
-Based on the logging code, propose the raw searches we should eventually use in Splunk.
-
-Do NOT assume field extractions already exist.
-
-First provide searches based on raw text such as:
-
-    index=<index>
-    "There are more than one rules matching the headers"
-
-and:
-
-    index=<index>
-    "The selected Rule ID is"
-
-Then identify what rex/extractions would be needed to obtain:
-
-    candidate rule IDs
-    rank
-    weight
-    selected rule
-    correlation/message ID
-
-Do not invent the regex until you have confirmed the exact log format from source.
-
-
-Expected output
-===============
-
-Produce an investigation report with these sections:
-
-1. Executive summary
-
-2. Exact V26 rule-selection algorithm
-
-3. Legacy algorithm and behavioral difference
-
-4. Rule weight calculation
-
-5. Rule rank calculation
-
-6. Supported matching operators and semantics
-
-7. Database schema / rule-loading path
-
-8. Relevant logging statements and exact formats
-
-9. Best correlation identifier for Splunk
-
-10. Proposed method for finding candidate rule pairs in DB
-
-11. Proposed method for finding actual collisions in Splunk
-
-12. Risks / unknowns requiring further investigation
-
-13. Important source references
-    - file
-    - class
-    - method
-    - line/reference
-
-14. Recommended NEXT investigation steps
-
-Do not make code changes.
-
-At the end, give me a compact table containing:
-
-Finding | Evidence | Confidence | Source location
-
-Use:
-- CONFIRMED = directly demonstrated by source
-- LIKELY = strongly supported but not fully proven
-- UNKNOWN = insufficient evidence
+1. Exact legacy precedence formula
+2. Exact V26 precedence formula
+3. SQL/query for generating per-rule precedence fingerprints
+4. SQL/query for generating candidate rule pairs where safely possible
+5. Method/code design for semantic-overlap checking
+6. Behavior-change classification algorithm
+7. Splunk query for confirming candidate pairs at runtime
+8. Final proposed impact-report schema
+9. Any remaining blockers
 
 Most importantly:
-do not treat the initial hypothesis as fact. Attempt to prove or disprove it from the repository.
+
+A pair having the same V26 weight/rank is NOT automatically an impact.
+
+A pair is an impact candidate when:
+
+    the rules can compete for the same request
+    AND
+    legacy versus V26 can select/order them differently.
+
+Prove these two properties separately.
