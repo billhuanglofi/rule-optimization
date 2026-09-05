@@ -1,342 +1,241 @@
-Continue the investigation. Do NOT modify production code or database data.
+Continue from the completed investigation.
 
-The next objective is to identify RULE PAIRS whose selection behavior can change
-between the legacy implementation and V26.
+Do NOT modify production code or database data.
 
-Important finding from the previous investigation:
-The regression surface is broader than only V26 rules with equal weight/rank,
-because legacy and V26 calculate precedence differently.
+The current findings indicate:
 
-Therefore DO NOT limit the analysis to:
-    same V26 weight AND same V26 rank.
+- No strict legacy-vs-V26 reversal was found among the clean current prod-like
+  ordinary rule fingerprints.
+- Legacy complete ties are unordered.
+- Normal V26 precedence is deterministic: weight DESC, rank DESC, rule ID ASC.
+- The GB pair is confirmed to overlap and changes from legacy ambiguity to a
+  deterministic V26 winner.
+- 19 exact-signature pairs have been identified as high-priority static
+  candidates.
+- 10 current prod-like rules have filter anomalies.
+- Runtime/Splunk evidence is currently incomplete.
+- nextRules must be treated separately because it bypasses normal deterministic
+  StoreCache ordering.
 
-We need to compare the relative ordering of every plausible competing rule pair
-under BOTH algorithms.
+The next objective is NOT to discover more broad candidates.
 
-
-OBJECTIVE
-=========
-
-Build a method to answer, for a pair of rules A and B:
-
-1. Can A and B potentially match the same request?
-2. What precedence does LEGACY assign to A vs B?
-3. What precedence does V26 assign to A vs B?
-4. Does the relative ordering change?
-5. If legacy precedence is tied/undefined, does V26 make the result deterministic?
-6. Which rule would V26 select?
-7. Have we observed this pair competing at runtime?
+The next objective is to VALIDATE the existing candidate pairs and produce an
+impact list.
 
 
-PHASE 1 — Precisely model both precedence algorithms
-=====================================================
+PHASE 1 — Validate the 19 exact-signature pairs
+===============================================
 
-From the source already investigated, write down the exact precedence key for
-LEGACY and V26.
+For each of the 19 exact-signature candidate pairs:
 
-Do not simplify them into generic descriptions.
+1. Load both rules using the same rule construction path used by the service.
+2. Identify the final conditions/evaluators actually used at runtime.
+3. Construct a concrete request/header/input witness that satisfies BOTH rules.
 
-For example determine the exact legacy values involved in selection:
-- condition count?
-- evaluator count?
-- number of conditions after filtering?
-- number before filtering?
-- any operator precedence?
-- collection/iteration order?
+Prefer reusing the real matching implementation.
 
-And determine the exact V26 values:
-- Rule.getWeight()
-- Rule.getRank()
-- Rule.getId()
-- any other comparator or filtering step
+Do NOT prove overlap merely by comparing strings in SQL if the actual matcher
+can be invoked.
 
-Pay special attention to the previous finding that V26 weight/rank may be
-calculated BEFORE some conditions are filtered from the cached rule.
-
-Document this explicitly.
-
-
-PHASE 2 — Build a "precedence fingerprint" for every rule
-=========================================================
-
-Using the actual database/schema identified previously, produce a dataset with
-one row per rule containing enough information to evaluate BOTH algorithms.
-
-Desired conceptual columns:
-
-rule_id
-
-legacy_condition_count
-legacy_evaluator_count
-legacy_precedence_value
-
-v26_weight
-v26_rank
-v26_rule_id_sort_key
-
-condition_fields
-condition_operators
-condition_values
-
-plus any relevant scope fields actually present in the implementation.
-
-Do not invent enabled/effective-date fields if the schema does not contain them.
-
-Also expose:
-- conditions discarded by V26 cache filtering
-- original calculated weight/rank
-- final conditions actually evaluated
-
-because the earlier investigation found these may differ.
-
-
-PHASE 3 — Find candidate competing pairs
-========================================
-
-We must avoid comparing every rule against every other rule if possible.
-
-Determine safe coarse filters that prove two rules CANNOT compete.
-
-Use only filters justified by actual source semantics.
-
-Examples may include:
-- incompatible message field requirements
-- incompatible exact equality conditions
-- incompatible routing/domain scope
-- incompatible country
-- incompatible message type
-
-But do not assume these fields exist or are hard scopes unless verified.
-
-Generate candidate pairs:
+For each pair report:
 
 rule_a
 rule_b
-
-where there is no obvious proof that they cannot both match.
-
-
-PHASE 4 — Compare legacy vs V26 precedence
-==========================================
-
-For each candidate pair, calculate:
-
-legacy_relation:
-    A_BEFORE_B
-    B_BEFORE_A
-    TIED_OR_UNDEFINED
-
-v26_relation:
-    A_BEFORE_B
-    B_BEFORE_A
-    TIED_BEFORE_ID
-    [whatever states match the actual implementation]
-
-Then calculate:
-
-behavior_change_type
-
-Use these categories:
-
-ORDER_REVERSED
-    Legacy prefers A but V26 prefers B,
-    or legacy prefers B but V26 prefers A.
-
-LEGACY_AMBIGUOUS_V26_DETERMINISTIC
-    Legacy cannot deterministically distinguish the two,
-    while V26 deterministically chooses one.
-
-PRECEDENCE_CHANGED_BUT_WINNER_SAME
-    Internal score/order changed but the same rule still wins.
-
-NO_PRECEDENCE_CHANGE
-    Both versions prefer the same rule for the same reason.
-
-UNKNOWN
-    Source semantics are insufficient to determine the comparison.
-
-
-PHASE 5 — Determine semantic overlap
-====================================
-
-Precedence change alone is not an impact.
-
-A pair is only potentially impactful if both rules can match the SAME input.
-
-For each behavior-change pair, determine whether overlap is:
-
-CONFIRMED_OVERLAP
-POSSIBLE_OVERLAP
-NO_OVERLAP
-UNKNOWN
-
-Use exact application matching semantics.
-
-Start with operators whose intersection is safely provable, such as exact
-equality / IN where possible.
-
-Do not claim general LIKE/regex overlap can be solved with simplistic SQL.
-
-For difficult predicates such as:
-- Java regex
-- LIKE if internally regex based
-- IN_LIKE
-- expressions
-
-mark them for application-level evaluation if necessary.
-
-Investigate whether the actual matcher/evaluator can be reused to validate
-overlap rather than reimplementing matching semantics.
-
-
-PHASE 6 — Produce the impact candidate report
-=============================================
-
-The final output I want is conceptually:
-
-rule_a
-rule_b
-legacy_precedence_a
-legacy_precedence_b
+witness_available
+witness_input
+rule_a_matches
+rule_b_matches
+legacy_score_a
+legacy_score_b
 legacy_relation
 v26_weight_a
 v26_rank_a
 v26_weight_b
 v26_rank_b
-v26_relation
 v26_expected_winner
-behavior_change_type
-overlap_status
+classification
 reason
-confidence
 
-Prioritize rows where:
+Classification should be one of:
 
-behavior_change_type IN (
-    ORDER_REVERSED,
-    LEGACY_AMBIGUOUS_V26_DETERMINISTIC
-)
+CONFIRMED_AMBIGUOUS_TO_DETERMINISTIC
+    Both rules match.
+    Legacy ends in a complete unresolved tie / encounter-order dependency.
+    V26 deterministically selects one rule.
 
-AND
+CONFIRMED_STRICT_REVERSAL
+    Both rules match.
+    Legacy deterministically prefers one rule.
+    V26 deterministically prefers the other.
 
-overlap_status IN (
-    CONFIRMED_OVERLAP,
-    POSSIBLE_OVERLAP
-)
+SAME_WINNER
+    Both rules match but behavior does not materially change.
+
+NO_OVERLAP
+    No common request can be demonstrated.
+
+POSSIBLE_OVERLAP
+    Static evidence suggests overlap but a concrete witness cannot yet be
+    constructed.
+
+UNKNOWN
+    Insufficient information.
 
 
-PHASE 7 — Runtime confirmation using Splunk
-===========================================
+PHASE 2 — Pay special attention to filter-anomalous rules
+=========================================================
 
-Separately, use the exact multiple-rule-match log format previously identified.
+Investigate the 10 rules previously identified as having cache/filter anomalies.
 
-Find actual runtime events where candidate pairs competed.
+For each such rule show:
 
-For each observed event extract:
+rule_id
+original/source conditions
+conditions removed during StoreCache.createRule
+conditions retained at runtime
+weight calculated before filtering
+rank calculated before filtering
+required_variables before filtering
+effective runtime predicates
 
-timestamp
-message/request identifier
-all_matching_rules
-selected_rule
-rank/weight if present
-service version
-relevant routing result if available
+Then identify every other rule with which it could compete.
 
-Aggregate by canonical rule pair.
+Important:
 
-Desired output:
+V26 precedence must use the derived fields exactly as production does, even if
+some contributing conditions are later removed.
+
+Determine whether any of these anomalies create a case where:
+
+- two rules have unexpected equal weight/rank
+- a rule receives precedence from a condition it no longer evaluates
+- the relative ordering differs from what the visible runtime conditions imply
+
+Add those pairs to the validation report.
+
+
+PHASE 3 — Re-check strict reversals only within confirmed overlaps
+=================================================================
+
+Do NOT perform another unrestricted all-rules Cartesian comparison.
+
+Instead, among pairs where a concrete overlap witness has been demonstrated,
+compare the exact legacy and V26 algorithms.
+
+Confirm whether there are any:
+
+    LEGACY A > B
+    V26    B > A
+
+or vice versa.
+
+If none exist, explicitly conclude:
+
+    "No strict reversal has been demonstrated in the current validated
+     prod-like rule population."
+
+Distinguish this from:
+
+    "Strict reversal is impossible."
+
+We do not have enough evidence to claim the latter.
+
+
+PHASE 4 — Separate nextRules
+============================
+
+Do not mix nextRules behavior with normal StoreCache ordering.
+
+Identify rules reachable through nextRules and determine:
+
+- what collection supplies them
+- whether encounter order is deterministic
+- whether weight/rank/ID sorting is applied
+- whether matchFirst/findFirst operates directly on unordered collection order
+
+Create a separate classification:
+
+NEXT_RULES_ORDER_DEPENDENT
+
+for any case whose behavior depends on this path.
+
+
+PHASE 5 — Produce identifiers for Splunk validation
+===================================================
+
+For every CONFIRMED overlap pair, generate a canonical pair key:
+
+    min(rule_id) + " <-> " + max(rule_id)
+
+Also provide:
+- expected V26 winner
+- classification
+- any known request/header witness
+- relevant rule IDs exactly as logged
+
+Produce a plain list suitable for use in Splunk searches.
+
+Do not claim runtime impact yet.
+
+
+PHASE 6 — Runtime validation plan
+=================================
+
+Using the exact logging formats already found in source, produce SPL that can
+search for each confirmed pair.
+
+The objective is to establish:
+
+    Did Rule A and Rule B actually appear together as matching candidates?
+
+and, if available:
+
+    Which rule was selected?
+
+For each pair aim to return:
 
 rule_a
 rule_b
-runtime_occurrences
+occurrences
 first_seen
 last_seen
-selected_rules_seen
-sample_request_id
+selected_rule
+sample_message_id
+sample_correlation_id
+service_version
+
+If broad searches are unreliable, generate targeted SPL for each confirmed
+pair instead of one expensive global search.
 
 
-PHASE 8 — Join static and runtime evidence
-==========================================
+FINAL DELIVERABLE
+=================
 
-Classify each pair:
+Produce one consolidated impact table:
 
-CONFIRMED_BEHAVIOR_CHANGE
-    Static analysis says legacy/V26 precedence differs
-    AND Splunk shows the pair competing.
+rule_a
+rule_b
+overlap_status
+legacy_relation
+v26_relation
+v26_expected_winner
+behavior_change_type
+filter_anomaly
+nextRules_path
+runtime_status
+confidence
+evidence
 
-LATENT_BEHAVIOR_CHANGE
-    Static analysis says precedence can differ
-    AND overlap is possible/confirmed
-    BUT no runtime occurrence has yet been found.
+Sort in this priority:
 
-OBSERVED_COLLISION_NO_PROVEN_VERSION_CHANGE
-    Splunk shows the rules competing
-    but static analysis does not yet prove a legacy/V26 ordering change.
+1. CONFIRMED_STRICT_REVERSAL + runtime seen
+2. CONFIRMED_AMBIGUOUS_TO_DETERMINISTIC + runtime seen
+3. CONFIRMED_STRICT_REVERSAL, runtime unknown
+4. CONFIRMED_AMBIGUOUS_TO_DETERMINISTIC, runtime unknown
+5. POSSIBLE_OVERLAP
+6. NO_OVERLAP / SAME_WINNER
 
-SAFE_SAME_ORDER
-    Rules may overlap but both algorithms produce the same winner.
+Do not propose a production fix yet.
 
-UNKNOWN
-    More evidence is required.
-
-
-IMPORTANT EDGE CASES
-====================
-
-Explicitly investigate these findings from the previous report:
-
-1. nextRules path
-   Determine whether selection through nextRules bypasses normal StoreCache
-   deterministic ordering. These pairs may need a separate category.
-
-2. Condition filtering
-   Weight/rank may be calculated before conditions are removed.
-   Make sure pair comparison reproduces this exact behavior.
-
-3. Expressions
-   If expression rules exist, do not silently ignore them.
-
-4. Request-level feature toggles / extendedHeaders
-   Determine whether the matching rule set can differ depending on request
-   flags. Identify whether this needs to be part of the candidate model.
-
-5. CL example inconsistency
-   The reported rule-382015 / CBPR_CL_IB_382001 result apparently does not fit
-   normal V26 ID-ascending behavior and rule-382015 is absent from the current
-   database.
-   Treat this as an unresolved case.
-   Do not force it to fit the general hypothesis.
-   Explain possible paths that could produce it.
-
-6. Do not rely on the supplied CSV as authoritative evidence if its provenance
-   cannot be established.
-
-
-DELIVERABLES
-============
-
-Do not implement a fix.
-
-Return:
-
-1. Exact legacy precedence formula
-2. Exact V26 precedence formula
-3. SQL/query for generating per-rule precedence fingerprints
-4. SQL/query for generating candidate rule pairs where safely possible
-5. Method/code design for semantic-overlap checking
-6. Behavior-change classification algorithm
-7. Splunk query for confirming candidate pairs at runtime
-8. Final proposed impact-report schema
-9. Any remaining blockers
-
-Most importantly:
-
-A pair having the same V26 weight/rank is NOT automatically an impact.
-
-A pair is an impact candidate when:
-
-    the rules can compete for the same request
-    AND
-    legacy versus V26 can select/order them differently.
-
-Prove these two properties separately.
+The goal of this step is to establish the smallest defensible list of rules
+whose behavior could actually change in V26.
