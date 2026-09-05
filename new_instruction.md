@@ -1,403 +1,332 @@
-Milestone 1 is successful.
+Do not redesign the existing differential-analyzer.
 
-We have demonstrated one concrete differential case:
+The next objective is to turn it into a reusable IMPACT DISCOVERY ENGINE.
 
-    CBPR_GB_IB_151632_02
-    CBPR_GB_IB_151632_01
+The long-term requirement is:
 
-Using one common effective matcher input:
+    run against EU PRODLIKE
+    run against AP PRODLIKE
+    run against AM PRODLIKE
 
-    Legacy 3.33.2.13:
-        both compete
-        winner = CBPR_GB_IB_151632_02
+and automatically identify rule competitions where legacy/non-V26 and V26
+can produce different winning rules.
 
-    V26 3.319.7:
-        both compete
-        winner = CBPR_GB_IB_151632_01
+Historical Splunk traffic is NOT the primary discovery mechanism.
+It will later be used to prove which discovered impacts have actually occurred.
 
-The result is currently classified as:
 
-    CONFIRMED_LATENT_SELECTION_CHANGE
+CORE PRINCIPLE
+==============
 
-because the common matcher input was constructed realistically but was not
-captured directly from one historical payment.
+The unit of analysis must be:
 
-DO NOT spend the next milestone manually validating more individual DB pairs.
+    one effective matcher-input witness
+    +
+    the COMPLETE environment rule snapshot
+    +
+    the real legacy evaluator
+    +
+    the real V26 evaluator
 
-The objective now is to GENERALIZE the differential method so that we can
-discover impacted rules across an entire environment and later reuse the same
-method for EU PRODLIKE, AP PRODLIKE, AM PRODLIKE, etc.
+Do not evaluate an isolated pair without evaluating all rules.
 
-Do not modify production code or DB data.
+A third rule may also match the witness and change the actual winner.
 
 
-============================================================
-MILESTONE 2 OBJECTIVE
-============================================================
+PHASE 1 — Complete environment RuleSnapshot
+===========================================
 
-Build/design a reusable differential impact analyser whose primary unit of
-analysis is an EFFECTIVE MATCHER INPUT.
+Build a reusable RuleSource that exports the full rule population required by
+both adapters.
 
-Conceptually:
+For every environment snapshot preserve enough raw information to reconstruct
+the actual production Rule objects.
 
-    analyse(effectiveMatcherInput, environmentRules)
-
-must produce:
-
-    legacyMatchingRules
-    legacyTopCandidates
-    legacyWinner
-
-    v26MatchingRules
-    v26TopCandidates
-    v26Winner
-
-    selectionChanged = legacyWinner != v26Winner
-
-The same matcher input must be supplied to both implementations.
-
-
-============================================================
-1. GENERALIZE THE EXISTING ONE-PAIR HARNESS
-============================================================
-
-First inspect what was created for Milestone 1.
-
-Separate any hard-coded assumptions for:
-
-    CBPR_GB_IB_151632_01
-    CBPR_GB_IB_151632_02
-
-from the actual reusable logic.
-
-Design the evaluator so that it accepts:
-
-    effective matcher input
-    rule snapshot / rule collection
-
-and executes the REAL legacy and V26 selection implementations.
-
-Do not hard-code the expected candidate pair.
-
-The evaluator must discover whatever rules match.
-
-
-============================================================
-2. RETAIN COMPLETE COMPETITION INFORMATION
-============================================================
-
-Do NOT assume exactly two rules compete.
-
-For each input retain:
-
-    allLegacyMatchingRules
-    legacyTopCandidates
-    legacyWinner
-
-    allV26MatchingRules
-    v26TopCandidates
-    v26Winner
-
-There may be 3, 4 or more matching rules.
-
-For reporting purposes derive:
-
-    winnerTransition =
-        legacyWinner + " -> " + v26Winner
-
-But retain the complete candidate group internally.
-
-
-============================================================
-3. DEFINE WHAT COUNTS AS AN IMPACT
-============================================================
-
-Primary behavior-change condition:
-
-    legacyWinner != v26Winner
-
-Classify results as:
-
-OBSERVED_SELECTION_CHANGE
-    Effective input was captured from a real historical/test execution and the
-    selected rules are supported by authoritative logs.
-
-REPLAY_CONFIRMED_SELECTION_CHANGE
-    A captured effective input was replayed through both exact implementations
-    and the winners differ.
-
-CONFIRMED_LATENT_SELECTION_CHANGE
-    A valid/realistic synthetic effective matcher input makes both versions
-    select different winners, but historical execution has not yet been proven.
-
-POSSIBLE_SELECTION_CHANGE
-    Static evidence suggests a competition/change but no common effective input
-    has been demonstrated.
-
-NO_SELECTION_CHANGE
-    Both versions produce the same winner.
-
-UNKNOWN
-    Evidence is insufficient.
-
-
-============================================================
-4. FIRST INPUT SOURCE: HISTORICAL / TEST EFFECTIVE INPUTS
-============================================================
-
-Investigate how we can obtain actual effective matcher inputs from existing
-executions.
-
-Possible sources:
-
-    Splunk
-    initiator logs
-    content-validation test runs
-    regression test artefacts
-    stored request/header dumps
-    existing CSV/workbooks
-    local captured logs
-
-The important data is NOT merely the raw payment.
-
-Ideally recover the final values presented to RuleMatcher after:
-
-    body parsing
-    field extraction
-    header creation
-    normalization
-    derived fields
-
-For every source, determine:
-
-    Can we reconstruct the complete matcher input?
-    Which fields are available?
-    Is provenance/version known?
-    Which request/test ID identifies the source?
-
-
-============================================================
-5. INVESTIGATE THE KNOWN _01/_02 HISTORICAL CASE
-============================================================
-
-Before scanning many inputs, finish the evidence chain for the known pair.
-
-We have identifiers for:
-
-    non-V26 execution
-    V26 execution
-    alternative V26 rerun
-
-Retrieve, if accessible:
-
-    deployed service version
-    effective matcher input
-    matching candidate rules
-    selected rule
-
-Compare the matcher inputs field by field.
-
-Report:
-
-    field
-    non-V26 value
-    V26 value
-    same/different
-
-If the effective matcher input is identical:
-
-    replay that captured input through both exact implementations.
-
-If it reproduces:
-
-    legacy -> _02
-    V26    -> _01
-
-upgrade the evidence accordingly.
-
-If the inputs differ, do NOT call that request pair a clean version-induced
-selection change. Explain which input differences affected matching.
-
-
-============================================================
-6. BUILD A CORPUS-LEVEL ANALYSER
-============================================================
-
-Once one captured input can be processed, generalize to N inputs:
-
-    for each effectiveMatcherInput:
-        evaluate legacy
-        evaluate V26
-        compare winners
-
-Produce one detailed row per input:
+Include provenance:
 
     environment
-    input_id
-    source
-    message/business ID if available
-    legacy_matching_rules
-    legacy_top_candidates
-    legacy_winner
-    v26_matching_rules
-    v26_top_candidates
-    v26_winner
-    selection_changed
-    evidence_classification
+    snapshot timestamp
+    source DB/schema
+    extraction query/version
+    rule count
+    source checksum/hash
+
+The evaluator must not contain EU-specific IDs or assumptions.
 
 
+PHASE 2 — Build a sound competition-candidate generator
+=======================================================
+
+Using parsed CONDITIONS, identify rules that MAY be simultaneously satisfiable.
+
+Do NOT start with a blind Cartesian product if safe pruning is possible.
+
+However, candidate pruning must be SOUND:
+
+    only discard a pair/group if we can prove that the predicates cannot both
+    be true.
+
+Examples:
+
+    field = GB
+    field = US
+
+can safely prove incompatibility.
+
+But:
+
+    LIKE
+    IN_LIKE
+    expression conditions
+    missing predicates
+
+must not be discarded unless incompatibility is actually proven.
+
+The goal is high recall, not aggressive pruning.
+
+
+PHASE 3 — Build a predicate-intersection / witness generator
 ============================================================
-7. AGGREGATE INTO IMPACTED RULE TRANSITIONS
-============================================================
 
-Then aggregate changed inputs by:
+For candidate competitions, attempt to construct one concrete EFFECTIVE
+MATCHER INPUT satisfying the competing predicates.
 
-    legacyWinner -> v26Winner
+Example output:
 
-Desired output similar to the existing workbook:
+{
+    "MsgType": "...",
+    "Country": "GB",
+    "ReceiverAddress": "...",
+    "Routing": "...",
+    ...
+}
 
-    Legacy_Winner
-    V26_Winner
-    Candidate_Rules
-    Count
+Use the exact application condition semantics already discovered.
 
-but add:
+Support incrementally:
 
-    Environment
-    First_Seen
-    Last_Seen
-    Evidence_Type
-    Sample_Input_ID
-    Service_Versions
-    Confidence
+    equality
+    IN
+    LIKE
+    IN_LIKE
+    combinations of those
 
-Example:
+For unsupported/complex expressions, return UNKNOWN rather than assuming
+no overlap.
+
+Every generated witness MUST be validated by the real matcher.
+
+Static reasoning proposes the witness.
+The real matcher proves whether each rule actually matches.
+
+
+PHASE 4 — Evaluate the witness against ALL environment rules
+=============================================================
+
+For every successfully generated witness:
+
+Run:
+
+    LegacyAdapter.evaluate(witness, completeRuleSnapshot)
+
+and:
+
+    V26Adapter.evaluate(witness, completeRuleSnapshot)
+
+Capture:
+
+Legacy:
+    allMatchingRules
+    topCandidateRules
+    possibleWinners
+    orderDependent
+
+V26:
+    allMatchingRules
+    topCandidateRules
+    winner
+
+Do not restrict either engine to the candidate pair that generated the witness.
+
+
+PHASE 5 — Detect behavior changes
+=================================
+
+Classify the result.
+
+STRICT_SELECTION_CHANGE
+
+    Legacy has a deterministic top winner A.
+    V26 deterministically selects B.
+    A != B.
+
+TIE_DETERMINIZATION_CHANGE
+
+    Legacy top/possible-winner set contains multiple rules.
+    V26 deterministically chooses one member.
+    Therefore another legacy top rule could previously win.
+
+NO_SELECTION_CHANGE
+
+    Both algorithms result in the same effective winner behavior.
+
+MATCH_SET_CHANGE
+
+    Legacy and V26 disagree on which rules match the same witness.
+    Keep this separately because this may indicate matcher/parser/filtering
+    differences rather than precedence differences.
+
+UNKNOWN
+
+    Analysis cannot safely establish behavior.
+
+
+PHASE 6 — Produce impacted winner transitions
+=============================================
+
+Aggregate behavior-changing witnesses into transitions such as:
+
+    rule-XXX -> CBPR-XXXX
+
+Desired output:
+
+environment
+legacy_rule
+v26_rule
+behavior_change_type
+competing_rules
+witness_id
+witness_headers
+legacy_possible_winners
+v26_winner
+confidence
+
+Multiple different witnesses may map to the same rule transition.
+
+Aggregate:
+
+    transition
+    number_of_witnesses
+    sample_witnesses
+
+
+PHASE 7 — Use the existing mismatch workbook as a GOLDEN SET
+=============================================================
+
+Do NOT use the workbook to drive the analyser.
+
+After generating results independently, compare them with the known workbook.
+
+For each known transition classify:
+
+    REDISCOVERED
+    PARTIALLY_REDICOVERED
+    NOT_FOUND
+    CONTRADICTED
+
+Use high-frequency examples such as:
 
     CBPR_GB_IB_151632_02
         ->
     CBPR_GB_IB_151632_01
 
-    count = N
+as regression tests for discovery quality.
+
+The important metric is recall:
+
+    How many known transitions can the generic analyser rediscover without
+    knowing their IDs in advance?
 
 
-============================================================
-8. USE THE EXISTING MISMATCH WORKBOOK AS A VALIDATION SET
-============================================================
+PHASE 8 — Only then add runtime evidence
+========================================
 
-The existing workbook/CSV contains likely transitions such as:
+After static+witness differential discovery works, enrich discovered transitions
+using Splunk/regression traffic.
 
-    CBPR_GB_IB_151632_02 -> CBPR_GB_IB_151632_01
+Splunk should answer:
 
-and other winner mismatches.
+    Has this competition actually occurred?
+    Which legacy rule was actually selected?
+    Which V26 rule was actually selected?
+    How often?
+    First/last seen?
+    Example message ID?
 
-Do NOT treat that workbook as authoritative if provenance is incomplete.
+This changes classification from:
 
-Instead use it as a validation target:
+    POTENTIAL / LATENT IMPACT
 
-    "Can the new analyser independently rediscover these transitions?"
+to:
 
-For every existing workbook transition classify:
+    OBSERVED IMPACT
 
-REDISCOVERED
-    independently found by new differential analysis
-
-SUPPORTED_ONLY
-    workbook claims it but new evidence is incomplete
-
-NOT_REPRODUCED
-    new analysis does not reproduce it
-
-CONTRADICTED
-    available evidence shows the workbook transition is not valid
+But inability to find Splunk evidence must NOT remove a valid synthetic
+differential result.
 
 
-============================================================
-9. ENVIRONMENT-INDEPENDENT DESIGN
-============================================================
+PHASE 9 — Environment portability
+=================================
 
-Do not hard-code EU PRODLIKE.
+The analyser must eventually work as:
 
-Separate:
+    analyse EU_PRODLIKE
+    analyse AP_PRODLIKE
+    analyse AM_PRODLIKE
 
-A. Rule source
-B. Effective-input source
-C. Differential evaluation logic
-D. Reporting
+Only these should vary:
 
-Conceptual interfaces:
+    RuleSource configuration
+    DB connection/query
+    environment metadata
+    optional runtime evidence source
 
-    RuleSource(environment)
-        -> rule snapshot
+These must remain environment-independent:
 
-    EffectiveInputSource(environment)
-        -> effective matcher inputs
-
-    DifferentialEvaluator
-        -> legacy result + V26 result
-
-    ImpactAggregator
-        -> winner transitions / candidate groups
-
-The same evaluator must later support:
-
-    EU_PRODLIKE
-    AP_PRODLIKE
-    AM_PRODLIKE
-
-Only data/configuration sources should change.
+    rule normalization
+    witness generation
+    LegacyAdapter
+    V26Adapter
+    differential comparison
+    impact aggregation
 
 
-============================================================
-10. DO NOT USE DB STATIC PAIR DISCOVERY AS THE PRIMARY METHOD YET
-============================================================
+MOST IMPORTANT DESIGN REQUIREMENTS
+==================================
 
-DB static analysis remains important, but it is the SECOND discovery layer.
+1. DB analysis identifies constraints; it does not prove production impact.
 
-First build:
+2. A witness proves that competition is possible.
 
-    real/test effective inputs
-        ->
-    differential evaluation
-        ->
-    observed impacted transitions
+3. The witness must be evaluated against ALL rules, not just the pair that
+   created it.
 
-After this works, we will add:
+4. The real legacy and V26 implementations must decide winners.
 
-    DB conditions
-        ->
-    possible competition
-        ->
-    synthetic witness generation
-        ->
-    same differential evaluator
-        ->
-    latent impacted transitions
+5. Legacy order-dependent ties must be represented as possible-winner sets,
+   not arbitrarily converted into one deterministic winner.
+
+6. Unknown operator semantics must produce UNKNOWN, not false NO-IMPACT.
+
+7. Splunk is evidence enrichment, not the primary discovery algorithm.
 
 
-============================================================
-DELIVERABLE FOR THIS MILESTONE
-============================================================
+NEXT DELIVERABLE
+================
 
-Do not attempt to solve every environment yet.
+Do not implement Splunk collection yet.
 
-Return:
+First deliver and, where practical, implement:
 
-1. How the existing Milestone 1 harness can be generalized.
-2. Exact reusable components/classes/scripts proposed.
-3. How one effective matcher input will be represented.
-4. How legacy/V26 evaluation will be invoked.
-5. How historical inputs can be collected.
-6. How results will be aggregated.
-7. How the existing mismatch workbook will be used for validation.
-8. What needs to be parameterized for EU/AP/AM PRODLIKE.
-9. Remaining blockers.
+    RuleSnapshot exporter
+    CandidateCompetitionGenerator
+    WitnessGenerator
+    whole-snapshot differential evaluation
+    behavior-change report
 
-If implementation is safe and isolated from production code, implement the
-smallest reusable version that can:
+Run it first on EU PRODLIKE.
 
-    take multiple effective matcher inputs
-    run both evaluators
-    output every case where winner differs.
+Then compare the independently discovered transitions against the existing
+mismatch workbook and report the rediscovery rate.
 
-Do not implement DB witness generation yet.
-Do not attempt a production fix.
+Also list every unsupported condition/operator that prevents complete coverage.
