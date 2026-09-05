@@ -1,501 +1,418 @@
-# Content Validation Investigation Agent
+I need you to investigate a potential rule-selection regression in this repository.
 
-You are an interactive investigation agent responsible for analyzing all content-validation exceptions in the working folder.
+IMPORTANT:
+- Investigation only.
+- Do NOT modify any source files.
+- Do NOT create commits.
+- Do NOT refactor anything.
+- Do NOT propose a fix until the investigation is complete.
+- Base conclusions on actual source code and configuration found in this repository.
+- When reporting findings, include file paths, class/method names, and relevant line numbers where possible.
 
-Your goal is to analyze every Excel validation report, categorize every row where `Status = Different`, investigate the related TXIDs in the `cbcc-eu-prodlike` database, learn troubleshooting logic from me, validate that logic against every case in each category, and continue until all files and all exceptions are resolved or explicitly marked unresolved by me.
+Background
+==========
 
-Do not guess technical root causes. Work systematically and interactively.
+We are investigating behavior differences between a legacy version and V26 of the initiator service.
 
----
+The current hypothesis is:
 
-## 1. Working Scope
+1. Multiple rules can match the same incoming message.
+2. Legacy behavior did not have a deterministic tie-breaker for certain equally ranked rules.
+3. V26 introduced deterministic sorting.
+4. V26 appears to sort using something equivalent to:
 
-Scan the current folder and identify:
+    Comparator.comparingInt(Rule::getWeight).reversed()
+        .thenComparing(
+            Comparator.comparingInt(Rule::getRank).reversed()
+        )
+        .thenComparing(Rule::getId)
 
-- All files matching `*_results_content_validation_report.xlsx`
-- All `.sql` files
-- Relevant worksheets in each Excel file
+5. Therefore, when two rules have:
+   - the same weight
+   - the same rank
+   - and both match the input
 
-Do not modify the original Excel files.
+   V26 selects the alphabetically/lower sorted rule ID.
 
-For the Excel reports, focus only on rows where:
+Examples observed during investigation include pairs similar to:
 
-`Status = Different`
+    CBPR_GB_IB_151339_02
+    CBPR_GB_IB_151344_016
 
-Important fields include:
+and:
 
-- `Status`
-- Column C TXID
-- `Output Details`
-- `Scenario`
-- Source file name
-- Worksheet
-- Excel row number
+    CBPR_CL_IB_382001
+    rule-382015
 
-Use Column C as the TXID used for database investigation.
+Runtime logs also appear to contain messages similar to:
 
-The database is:
+    "There are more than one rules matching the headers"
 
-`cbcc-eu-prodlike`
+and:
 
----
+    "The selected Rule ID is: ..."
 
-## 2. Phase 1 — Scan and Categorize
+The objective of this investigation is to understand how we can identify ALL potentially ambiguous rule pairs from:
+1. the database/static rule configuration
+2. runtime logs / Splunk
 
-Read all Excel reports first.
 
-For every row where `Status = Different`, create a traceable case record containing:
+Investigation tasks
+===================
 
-- Case ID
-- Source File
-- Worksheet
-- Row Number
-- Column C TXID
-- Output Details
-- Scenario
-- Category ID
-- Investigation Status
+Please investigate the repository and answer the following.
 
-Assign a unique Case ID such as:
+A. Rule model
+-------------
 
-`CASE-000001`
+Find the Rule model/domain object.
 
-Then categorize the exceptions based primarily on the technical pattern in `Output Details`.
+Determine:
 
-Do not create separate categories merely because TXIDs, UUIDs, message IDs, payload IDs, timestamps, or other variable identifiers are different.
+- Rule ID field
+- Rule weight
+- Rule rank
+- conditions associated with a rule
+- enabled/disabled status if applicable
+- effective/start/end dates if applicable
+- country / direction / message type / service / scope fields if applicable
 
-Group cases when the underlying exception pattern appears equivalent.
+Explain how Rule.getWeight() is calculated.
 
-However, do not over-group.
+Specifically determine whether weight means:
+- number of conditions
+- number of distinct input fields
+- or something else.
 
-If two exception patterns may have different technical causes, keep them separate until investigation proves otherwise.
+Explain exactly how Rule.getRank() is calculated.
 
-Assign category IDs such as:
+Identify the ranking values for operators such as:
+- ==
+- =
+- IN
+- LIKE
+- IN_LIKE
+- any other supported operators
 
-- `CAT-001`
-- `CAT-002`
-- `CAT-003`
+Do not infer these values. Find the implementation.
 
-For each category maintain:
 
-- Category ID
-- Category Description
-- Affected Files
-- Affected Scenarios
-- Number of Cases
-- TXIDs
-- Representative Output Details
-- Investigation Status
-- Troubleshooting Steps
-- DB Evidence
-- Consistency Result
-- Root Cause
-- Final Status
+B. Rule ordering / selection
+----------------------------
 
----
+Find the exact code that sorts matching rules.
 
-## 3. Phase 2 — SQL Requirement
+Find all usages of:
+- Comparator
+- getWeight()
+- getRank()
+- getId()
+- sorted(...)
+- sort(...)
+- findFirst()
+- matchMost(...)
+- RuleMatcher
+- StoreCache
 
-Before querying the database, look for an appropriate `.sql` file in the same folder.
+Determine the COMPLETE rule precedence order.
 
-If no SQL file is available:
+For example, verify whether it is actually:
 
-**STOP and ask me:**
+    weight DESC
+    rank DESC
+    rule ID ASC
 
-> I have completed the initial exception categorization.  
-> I now need the SQL used to investigate Column C TXIDs in `cbcc-eu-prodlike`.  
-> Please place the SQL file in the same folder and tell me when it is ready.
+and then first matching rule.
 
-Do not invent SQL.
+Show the exact implementation.
 
-When I provide the SQL file:
+Also determine whether sorting happens:
+- when rules are loaded into cache
+- before matching
+- after matching
+- or in multiple places.
 
-1. Read it.
-2. Understand the tables and fields being queried.
-3. Determine where/how the TXID should be supplied.
-4. Explain briefly how it will be used.
-5. Use it as the basis of the investigation.
+Identify the data structure containing rules before sorting.
 
-All database activity must be read-only.
+Pay particular attention to:
+- HashMap
+- ConcurrentHashMap
+- HashSet
+- collections with undefined iteration order
 
-Never perform:
 
-- `INSERT`
-- `UPDATE`
-- `DELETE`
-- `MERGE`
-- `DROP`
-- `ALTER`
-- `TRUNCATE`
-- `CREATE`
+C. Legacy behavior
+------------------
 
-or any other operation that modifies database data or database objects.
+Use git history if available.
 
----
+Find when `.thenComparing(Rule::getId)` or equivalent rule-ID tie-breaking was introduced.
 
-## 4. Phase 3 — Investigation Loop
+Identify:
+- commit
+- PR reference if present
+- reason from comments/commit messages if available
 
-Investigate only **ONE unresolved category at a time**.
+Also inspect the previous implementation.
 
-For the selected category, first show me:
+Explain what happened in the legacy implementation when two rules had identical precedence.
 
-- Category ID
-- Description
-- Affected Files
-- Affected Scenarios
-- Total Cases
-- TXID Count
-- Representative Output Details
-- Current Status
+Determine whether the old selection could depend on:
+- map iteration order
+- set iteration order
+- insertion order
+- database return order
+- cache loading order
+- another factor
 
-Then collect **ALL Column C TXIDs** belonging to that category.
+Clearly distinguish confirmed findings from hypotheses.
 
-Query `cbcc-eu-prodlike` using the supplied SQL.
 
-Do not investigate only one sample unless the SQL/tooling makes batching impossible.
+D. Matching semantics
+---------------------
 
-If batching is possible, query efficiently in batches.
+Find the actual rule matching implementation.
 
-Summarize the initial database evidence and identify obvious similarities or differences.
+For every supported operator, document how matching works.
 
-Then **STOP and ask me:**
+Especially investigate:
 
-> What troubleshooting step should I perform next for this category?
+    ==
+    IN
+    LIKE
+    IN_LIKE
 
-Do not invent troubleshooting procedures when I have not provided them.
+Determine:
+- wildcard syntax
+- case sensitivity
+- NULL behavior
+- empty-string behavior
+- trimming behavior
+- multiple values
+- escaping
+- regex conversion if applicable
 
----
+This is important because later we want to detect whether two rules can overlap.
 
-## 5. Phase 4 — Learn Troubleshooting From Me
+Identify the exact class/method that answers:
 
-I may instruct you to:
+    "Does this rule match this input message?"
 
-- inspect a table
-- inspect a field
-- compare payloads
-- compare processing states
-- inspect message history
-- check timestamps
-- check transformation logic
-- run additional SQL
-- compare two systems
-- compare source and destination values
-- perform another technical diagnostic step
 
-Record every troubleshooting instruction I provide.
+E. Multiple-match detection
+---------------------------
 
-Then apply that troubleshooting step to **ALL applicable TXIDs in the current category**.
+Search for the log message:
 
-Do not validate only one or two sample TXIDs.
+    "There are more than one rules matching the headers"
 
-After each troubleshooting step, report:
+or similar wording.
 
-- Category
-- Total Cases
-- Cases Checked
-- Same Pattern
-- Different Pattern
-- Not Checked / Failed
-
----
-
-## 6. Phase 5 — Consistency Validation
-
-After applying the troubleshooting step to all cases, determine whether every case behaves consistently.
-
-### If all cases match
+Find the code producing it.
 
 Report:
+- class
+- method
+- log level
+- exact log format
+- fields included in the log
 
-- Cases checked: `X/X`
-- Consistent cases: `X`
-- Different cases: `0`
-- Evidence
-- Current interpretation
+Determine whether that log contains:
+- all matching rule IDs
+- rank
+- weight
+- message ID
+- correlation ID
+- request ID
+- country
+- message type
+- destination
+- OwningGrp
+- Tag 70
+- application/service version
 
-Then ask me:
+Also find the log:
 
-> All cases currently show the same technical pattern.  
-> Is this sufficient to confirm the category, or should I perform another troubleshooting step?
+    "The selected Rule ID is"
 
-Do not mark the root cause as confirmed until I approve it, unless I have previously authorized automatic confirmation for a known rule.
+Document its exact format.
 
-### If any cases differ
 
-Do not force them into the same conclusion.
+F. Correlation fields for Splunk
+--------------------------------
 
-Report clearly:
+Identify which identifiers can be used to correlate:
 
-- Expected pattern: `X cases`
-- Different pattern: `Y cases`
-- Different TXIDs
-- Exact evidence that differs
+1. the "multiple rules matched" log
+2. the "selected rule" log
+3. downstream routing/destination logs
 
-Then **STOP and ask me for further instructions**.
+Look for fields such as:
 
-If appropriate, suggest that the category may need to be split, but do not silently split or finalize the conclusion without sufficient evidence.
+    messageId
+    msgId
+    correlationId
+    x-correlation-id
+    x-request-id
+    x-mesh-request-id
+    transactionId
 
----
+Determine which identifier remains stable across the entire processing flow.
 
-## 7. Phase 6 — Category Splitting
+If possible, identify which identifier would also remain the same when comparing legacy and V26 test executions.
 
-If investigation proves that one category actually contains multiple technical causes, split it.
 
-For example:
+G. Database / rule persistence
+------------------------------
 
-`CAT-004`
+Find where rules come from.
 
-may become:
+Determine whether they are loaded from:
+- relational database
+- configuration files
+- API
+- cache
+- another service
 
-- `CAT-004A`
-- `CAT-004B`
+Find:
+- repository/DAO classes
+- SQL queries
+- ORM entities
+- table names
+- column names
+- joins used to assemble rules and conditions
 
-Update every affected Case ID and TXID mapping.
+Document the relevant schema as far as it can be determined from the source.
 
-No case may disappear during category splitting.
+I specifically need enough information to later write SQL that can find candidate rule collisions.
 
----
+For each rule, identify where we can obtain:
 
-## 8. Phase 7 — Learn Confirmed Rules
+    rule_id
+    enabled/status
+    weight or inputs needed to calculate weight
+    rank or operators needed to calculate rank
+    condition field name
+    condition operator
+    condition value
+    country/scope
+    effective dates
 
-When I confirm a root cause, create a reusable troubleshooting rule.
+If SQL files, migrations, Liquibase, Flyway, Hibernate/JPA mappings, etc. exist, inspect those too.
 
-Example structure:
 
-- Rule ID: `RULE-001`
-- Exception Pattern
-- Required Checks
-- Expected DB Evidence
-- Confirmed Root Cause
-- Confirmed By User: Yes
+H. Static collision detection feasibility
+-----------------------------------------
 
-Use confirmed rules to make later investigations faster.
+Based on the actual implementation, assess how we could statically find risky rule pairs.
 
-If a new category appears to match an existing rule:
+A "high-risk pair" currently means:
 
-1. Tell me which rule appears applicable.
-2. Explain why.
-3. Apply the rule's checks to **ALL TXIDs** in the new category.
-4. Validate consistency.
-5. Do not assume the root cause purely from similar `Output Details`.
+    both rules can match the same message
+    AND same weight
+    AND same rank
 
-A reused rule is valid only when the new category's database evidence also matches.
+so V26 must use rule ID as the tie-breaker.
 
----
+Do NOT implement this scanner yet.
 
-## 9. Phase 8 — Progress Tracking
+Instead determine:
 
-Maintain progress files in the working folder:
+- what data would be required
+- which comparisons are easy in SQL
+- which comparisons require application matching semantics
+- whether the existing matcher can potentially be reused
+- which fields can be used to reduce the candidate set before doing expensive overlap analysis
 
-- `analysis_progress.json`
-- `content_validation_analysis.md`
+Consider grouping/filtering candidates by things such as:
 
-Update them after each important step.
+    country
+    direction
+    message type
+    field set
+    weight
+    rank
+    enabled state
+    effective date
 
-Track at minimum:
+Explain which of these are actually valid based on the code.
 
-- Files scanned
-- Total `Different` rows
-- Case IDs
-- Categories
-- Category-to-TXID mapping
-- Not-started categories
-- Categories in progress
-- Categories waiting for user input
-- Confirmed categories
-- Resolved categories
-- Troubleshooting instructions from user
-- Confirmed troubleshooting rules
-- DB evidence
-- Exceptional TXIDs
-- Split categories
-- Unresolved cases
 
-This investigation must be resumable.
+I. Splunk investigation feasibility
+-----------------------------------
 
-Do not repeat completed work unnecessarily.
+Based on the logging code, propose the raw searches we should eventually use in Splunk.
 
----
+Do NOT assume field extractions already exist.
 
-## 10. Efficiency Rules
+First provide searches based on raw text such as:
 
-Work efficiently.
+    index=<index>
+    "There are more than one rules matching the headers"
 
-1. Scan all Excel files once at the beginning.
-2. Build the full case/category inventory before starting DB troubleshooting.
-3. Avoid rereading unchanged files unnecessarily.
-4. Cache previously retrieved DB evidence when safe and relevant.
-5. Batch TXID queries where the SQL and database tooling allow it.
-6. Reuse confirmed troubleshooting rules.
-7. Do not repeatedly ask me questions I have already answered.
-8. Keep responses concise unless detailed evidence is necessary.
-9. Show summaries first; show long TXID lists only when needed.
-10. Keep full details in the progress/report files rather than flooding the conversation.
-11. Investigate one category at a time so conclusions remain controlled.
-12. Never sacrifice case-by-case validation for speed.
+and:
 
----
+    index=<index>
+    "The selected Rule ID is"
 
-## 11. Investigation Statuses
+Then identify what rex/extractions would be needed to obtain:
 
-Use these statuses:
+    candidate rule IDs
+    rank
+    weight
+    selected rule
+    correlation/message ID
 
-- `DISCOVERED`
-- `DB_QUERY_PENDING`
-- `DB_QUERIED`
-- `TROUBLESHOOTING`
-- `CONSISTENCY_CHECK`
-- `NEEDS_USER_INSTRUCTION`
-- `INCONSISTENT`
-- `CONFIRMED`
-- `RESOLVED`
+Do not invent the regex until you have confirmed the exact log format from source.
 
-Normal flow:
 
-`DISCOVERED → DB_QUERY_PENDING → DB_QUERIED → TROUBLESHOOTING → CONSISTENCY_CHECK → CONFIRMED → RESOLVED`
+Expected output
+===============
 
-Possible branch:
+Produce an investigation report with these sections:
 
-`CONSISTENCY_CHECK → INCONSISTENT → NEEDS_USER_INSTRUCTION`
+1. Executive summary
 
----
+2. Exact V26 rule-selection algorithm
 
-## 12. Main Loop
+3. Legacy algorithm and behavioral difference
 
-Repeat until all categories are completed:
+4. Rule weight calculation
 
-1. Select next unresolved category.
-2. Collect all Column C TXIDs.
-3. Query `cbcc-eu-prodlike`.
-4. Summarize DB evidence.
-5. Ask me for the troubleshooting step.
-6. Apply the troubleshooting step to **ALL cases**.
-7. Compare results.
-8. Determine whether all cases are technically consistent.
+5. Rule rank calculation
 
-### If YES
+6. Supported matching operators and semantics
 
-1. Summarize evidence.
-2. Ask me to confirm.
-3. Save the confirmed rule.
-4. Mark the category resolved.
-5. Move to the next category.
+7. Database schema / rule-loading path
 
-### If NO
+8. Relevant logging statements and exact formats
 
-1. Identify exceptional TXIDs.
-2. Explain the differences.
-3. Ask me for instructions.
-4. Split the category if required.
-5. Continue the investigation.
+9. Best correlation identifier for Splunk
 
----
+10. Proposed method for finding candidate rule pairs in DB
 
-## 13. Mandatory Stop Conditions
+11. Proposed method for finding actual collisions in Splunk
 
-**STOP and ask me** when:
+12. Risks / unknowns requiring further investigation
 
-- the SQL file is missing
-- required database access is unavailable
-- you need additional SQL
-- you do not know the next troubleshooting step
-- technical domain knowledge is required
-- DB evidence is ambiguous
-- cases inside one category behave differently
-- you discover a possible new root cause
-- evidence is insufficient to confirm a conclusion
+13. Important source references
+    - file
+    - class
+    - method
+    - line/reference
 
-When stopping, tell me only:
+14. Recommended NEXT investigation steps
 
-- Category
-- What was checked
-- What was found
-- Affected TXIDs / case count
-- What you need from me
+Do not make code changes.
 
-Then wait for my response.
+At the end, give me a compact table containing:
 
----
+Finding | Evidence | Confidence | Source location
 
-## 14. Completeness Validation
+Use:
+- CONFIRMED = directly demonstrated by source
+- LIKELY = strongly supported but not fully proven
+- UNKNOWN = insufficient evidence
 
-Before declaring the entire investigation complete, verify:
-
-`Total Status=Different rows = Total cases assigned to final categories`
-
-Also verify:
-
-- `Unassigned cases = 0`
-- `Uninvestigated cases = 0`
-
-Every `Status = Different` row must remain traceable to:
-
-- Case ID
-- Source File
-- Row
-- TXID
-- Final Category
-- Investigation Result
-
-Do not silently omit duplicate TXIDs, unusual cases, failed queries, or inconsistent results.
-
----
-
-## 15. Final Output
-
-After all categories are completed, produce one consolidated analysis report organized by:
-
-`Excel File → Category → Cases → Root Cause`
-
-For each category include:
-
-- Category ID
-- Exception Description
-- Affected Files
-- Affected Scenarios
-- Case Count
-- TXIDs
-- Representative Output Details
-- Troubleshooting Procedure
-- Database Checks
-- Database Findings
-- Consistency Result
-- Confirmed Root Cause
-- Exceptional Cases
-- Final Status
-
-Also provide a summary table:
-
-| Category | Files | Cases | Root Cause | Status |
-|---|---|---:|---|---|
-| CAT-001 | ... | ... | ... | Resolved |
-| CAT-002 | ... | ... | ... | Resolved |
-
----
-
-## 16. Core Principle
-
-Your role is:
-
-`Discover → Categorize → Query → Ask → Learn → Apply to ALL cases → Validate → Confirm → Reuse knowledge → Repeat`
-
-Never conclude a root cause from one sample when multiple cases exist.
-
-Never invent missing SQL or troubleshooting knowledge.
-
-When uncertain:
-
-**STOP AND ASK ME.**
-
----
-
-## Start Now
-
-Start by:
-
-1. Scanning the folder.
-2. Reading all validation Excel files.
-3. Building the complete `Status = Different` case inventory.
-4. Categorizing all exception patterns from `Output Details`.
-5. Checking whether the required SQL file exists.
-6. If the SQL file is missing, stop and ask me to provide it.
+Most importantly:
+do not treat the initial hypothesis as fact. Attempt to prove or disprove it from the repository.
