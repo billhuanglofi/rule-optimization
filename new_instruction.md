@@ -1,77 +1,60 @@
-The discovery phase is complete. Do not redesign or rerun the generic discovery
-algorithm unless a correctness defect is found.
+I need the concrete impacted Rule ID result now.
 
-Now HARDEN the final result for release-impact assessment.
+From the completed EU PRODLIKE analysis, export the 3,277
+matcher-confirmed behavior-change Rule IDs.
 
-1. Review every one of the 5 EU STRICT latent transitions individually.
-   For each provide:
-   - complete legacy matching/top-candidate result
-   - complete V26 matching/top-candidate result
-   - generated witness
-   - all rules matching that witness
-   - exact reason legacy prefers A
-   - exact reason V26 prefers B
-   - whether the witness is only matcher-valid or also demonstrably
-     request/message-reachable
-   - source DB conditions for the decisive rules
+Do NOT include the 6 NO_SELECTION_CHANGE-only diagnostic IDs.
 
-2. Keep the 17,190 tie-determinization groups separate from strict transitions.
-   Do not present them as 17,190 confirmed production incidents.
+Produce:
 
-3. Keep MATCH_SET_CHANGE results separate from precedence-only changes.
+1. EU_POTENTIAL_IMPACTED_RULE_IDS.csv
 
-4. Reconcile the 3,283 unique impacted-rule IDs into:
-   - strict-change rules
-   - tie-determinization rules
-   - match-set-change rules
-   - overlapping categories
-   - runtime-confirmed rules
-   - latent-only rules
+One row per unique Rule ID with columns:
 
-5. Produce an executive release-impact table with:
-   Environment
-   Legacy winner / possible winner
-   V26 winner
-   Change type
-   Candidate rules
-   Witness status
-   Request-reachable?
-   Historical/runtime observed?
-   Runtime count
-   Confidence
-   Recommended investigation priority
+rule_id
+impact_category
+strict_selection_change
+tie_determinization
+match_set_change
+legacy_winner_in_any_case
+v26_winner_in_any_case
+number_of_change_groups
+number_of_witnesses
+sample_legacy_winner
+sample_v26_winner
+confidence
 
-6. Highlight the independently rediscovered known mismatch dataset:
-   - 15/15 transitions rediscovered
-   - 2,334/2,334 occurrence-weighted rediscovery
-   - clearly state that workbook runtime/service-version provenance remains
-     unknown, so this is validation/supporting evidence rather than authoritative
-     runtime proof.
+2. Also produce EU_POTENTIAL_IMPACTED_RULE_PAIRS.csv
 
-7. Quantify unresolved coverage:
-   - 96,496 EU UNKNOWN pairs
-   - operators/reasons causing UNKNOWN
-   - condition fields with unknown request/extraction origin
-   - nextRules coverage
-   - current-vs-historical snapshot limitation
+For every actual winner transition / competition relationship include:
 
-8. For AP PRODLIKE, produce the same summary format as EU and clearly distinguish
-   "no strict generated transitions" from "no behavior change."
+legacy_rule
+v26_rule
+candidate_rules
+change_type
+witness_count
+runtime_count
+confidence
 
-9. For AM PRODLIKE, do not fabricate results. State exactly what configuration
-   or access is missing and provide the ready-to-run command/config.
+3. Give me the exact counts:
 
-10. Produce a final management-friendly conclusion answering:
+Total exported IDs
+NO_SELECTION_CHANGE-only IDs
+Potential impacted IDs
+Strict-change IDs
+Tie-determinization IDs
+Match-set-change IDs
+IDs appearing in multiple categories
+Runtime-confirmed IDs
+UNKNOWN/unresolved candidate count
 
-    A. What has definitely changed in V26?
-    B. Which rule transitions are strongest candidates for actual impact?
-    C. Which known regression transitions were independently reproduced?
-    D. How much of the rule population was covered?
-    E. What remains unknown?
-    F. What needs runtime evidence before release decisions?
-    G. Which rules should be reviewed first?
+4. Print the first 100 potential impacted Rule IDs in the terminal
+so I can immediately inspect them.
 
-Do not end with another investigation plan.
+5. Explicitly answer:
 
-Update FINAL_INVESTIGATION_REPORT.md and produce a concise
-RELEASE_IMPACT_SUMMARY.md containing only the decision-relevant findings.
+"How many EU PRODLIKE Rule IDs have been positively demonstrated
+by the matcher to participate in a legacy/V26 behavior change?"
+
+Do not perform another discovery run.
+Use the completed results.
